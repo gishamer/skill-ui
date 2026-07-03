@@ -1,0 +1,43 @@
+{
+  "name": "skill-ui",
+  "version": "0.1.0",
+  "description": "Desktop app to browse, install, create, update and publish Agent Skills (npx skills workflow) for Claude Desktop, Hermes and custom clients.",
+  "author": "Gishamer",
+  "license": "MIT",
+  "main": "./out/main/index.js",
+  "bin": {
+    "skill-ui": "./bin/skill-ui.js"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "start": "electron-vite preview",
+    "build": "electron-vite build",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "dist": "electron-vite build && electron-builder",
+    "dist:win": "electron-vite build && electron-builder --win",
+    "dist:mac": "electron-vite build && electron-builder --mac",
+    "dist:linux": "electron-vite build && electron-builder --linux",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "@octokit/rest": "^21.0.2",
+    "electron-store": "^8.2.0",
+    "gray-matter": "^4.0.3",
+    "lucide-react": "^0.460.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11"
+  }
+}

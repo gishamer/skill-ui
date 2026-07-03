@@ -1,0 +1,43 @@
+appId: io.gishamer.skillui
+productName: Skill UI
+copyright: Copyright © 2026 Gishamer
+directories:
+  buildResources: build
+  output: release/${version}
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml,package-lock.json}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: ${productName}-${version}-setup.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  category: public.app-category.developer-tools
+  artifactName: ${productName}-${version}-${arch}.${ext}
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+linux:
+  target:
+    - AppImage
+    - deb
+  maintainer: gishamer.io
+  category: Development
+  artifactName: ${productName}-${version}-${arch}.${ext}
+npmRebuild: false
+publish:
+  provider: github
+  owner: gishamer
+  repo: skill-ui

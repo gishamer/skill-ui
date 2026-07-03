@@ -1,0 +1,9 @@
+node_modules/
+out/
+dist/
+release/
+*.log
+.loop/
+.DS_Store
+.env
+.vite/
