@@ -9,8 +9,11 @@ import { getSettings } from './settings'
  *
  *   Claude Desktop -> ~/.claude/skills
  *   Hermes         -> ~/.hermes/skills
+ *   Copilot/VSCode -> ~/.copilot/skills
+ *   npx skills     -> project/local copied skills directory when configured as custom
  *
- * These mirror where each client looks for SKILL.md skills by default.
+ * These mirror local-folder integration points. Native CLI adapters can report
+ * blocked/unsupported separately when the external command is unavailable.
  */
 interface ClientDef {
   id: string
@@ -20,14 +23,19 @@ interface ClientDef {
 
 const CLIENT_DEFS: ClientDef[] = [
   {
-    id: 'claude-desktop',
-    label: 'Claude Desktop',
+    id: 'claude',
+    label: 'Claude',
     dir: () => join(homedir(), '.claude', 'skills')
   },
   {
     id: 'hermes',
     label: 'Hermes',
     dir: () => join(homedir(), '.hermes', 'skills')
+  },
+  {
+    id: 'copilot',
+    label: 'Copilot / VS Code',
+    dir: () => join(homedir(), '.copilot', 'skills')
   }
 ]
 

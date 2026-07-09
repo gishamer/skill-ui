@@ -101,17 +101,46 @@ export default function InstalledPage() {
     if (st === 'outdated')
       return (
         <span className="badge amber">
-          <span className="dot" /> update available
+          <span className="dot" /> outdated
         </span>
       )
+    if (st === 'locally-modified') return <span className="badge amber">locally modified</span>
+    if (st === 'diverged') return <span className="badge amber">diverged</span>
+    if (st === 'blocked') return <span className="badge amber">blocked</span>
+    if (st === 'unsupported') return <span className="badge gray">unsupported</span>
+    if (st === 'legacy-symlink') return <span className="badge amber">legacy symlink</span>
     if (st === 'up-to-date')
       return (
         <span className="badge green">
-          <span className="dot" /> up to date
+          <span className="dot" /> current
         </span>
       )
     if (st === 'not-in-repo') return <span className="badge gray">not in repo</span>
+    if (st === 'unknown') return <span className="badge gray">unknown</span>
     return null
+  }
+
+  async function viewDiff(skill: LocalSkill) {
+    const repoPath = skill.receipt?.sourcePath
+    if (!repoPath) return toast({ kind: 'error', message: 'No Skill UI receipt/source path is available for this install.' })
+    try {
+      const diff = await unwrap(api.skills.diffInstalled({ repoPath, dir: skill.dir }))
+      toast({ kind: 'info', message: diff.text || 'No local bundle differences.', timeout: 0 })
+    } catch (err) {
+      toast({ kind: 'error', message: (err as Error).message })
+    }
+  }
+
+  async function adoptLocal(skill: LocalSkill) {
+    const repoPath = skill.receipt?.sourcePath
+    if (!repoPath) return toast({ kind: 'error', message: 'No Skill UI receipt/source path is available for this install.' })
+    try {
+      const res = await unwrap(api.skills.adoptLocal({ repoPath, dir: skill.dir }))
+      toast({ kind: 'success', message: `Adopted ${res.files.length} file(s) into ${res.adoptedPath}.` })
+      await load()
+    } catch (err) {
+      toast({ kind: 'error', message: (err as Error).message })
+    }
   }
 
   return (
@@ -191,10 +220,20 @@ export default function InstalledPage() {
                 className="btn small"
                 onClick={() => updateOne(s)}
                 disabled={updatingDir === s.dir || s.update?.state !== 'outdated'}
-                title={s.update?.state === 'outdated' ? 'Update to latest' : 'Up to date'}
+                title={s.update?.state === 'outdated' ? 'Update to latest' : 'Update is only enabled for clean outdated installs'}
               >
                 {updatingDir === s.dir ? <Spinner /> : <ArrowUpCircle size={14} />} Update
               </button>
+              {(s.update?.state === 'locally-modified' || s.update?.state === 'diverged') && (
+                <>
+                  <button className="btn small" onClick={() => viewDiff(s)}>
+                    View diff
+                  </button>
+                  <button className="btn small" onClick={() => adoptLocal(s)}>
+                    Adopt
+                  </button>
+                </>
+              )}
               <button className="btn small" onClick={() => edit(s)}>
                 <Pencil size={14} /> Edit
               </button>

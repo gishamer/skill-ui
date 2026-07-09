@@ -41,7 +41,9 @@ const api: SkillUiApi = {
     validate: (args) => ipcRenderer.invoke('skills:validate', args),
     saveLocal: (args: SaveLocalArgs) => ipcRenderer.invoke('skills:saveLocal', args),
     upload: (args: UploadArgs) => ipcRenderer.invoke('skills:upload', args),
-    update: (args: UpdateArgs) => ipcRenderer.invoke('skills:update', args)
+    update: (args: UpdateArgs) => ipcRenderer.invoke('skills:update', args),
+    diffInstalled: (args) => ipcRenderer.invoke('skills:diffInstalled', args),
+    adoptLocal: (args) => ipcRenderer.invoke('skills:adoptLocal', args)
   }
 }
 

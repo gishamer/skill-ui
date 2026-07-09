@@ -112,7 +112,7 @@ export default function BrowsePage() {
           <div className="banner-text">
             <strong>Repo health: {health.ok ? 'OK' : `${health.issues.filter((i) => i.severity === 'error').length} issue(s)`}</strong>
             <span>
-              {health.counts.skills} skills · {health.counts.claudeMarketplace} Claude marketplace · {health.counts.copilotMarketplace} Copilot marketplace · {health.counts.triggerEvals} trigger evals · {health.mode} mode
+              {health.counts.skills} skills · {health.counts.claudeMarketplace} Claude marketplace · {health.counts.copilotMarketplace} Copilot marketplace · {health.counts.skillsHub} Skills Hub · {health.counts.triggerEvals} trigger evals · {health.mode} mode
             </span>
             {!health.ok && health.issues.slice(0, 3).map((issue) => (
               <span key={`${issue.code}-${issue.name ?? issue.message}`} className="mono">{issue.code}: {issue.name ?? issue.message}</span>
@@ -147,7 +147,17 @@ export default function BrowsePage() {
           {skills.map((s) => {
             const bundled = s.repoPath.startsWith('builtin/')
             return (
-              <div className="card" key={s.repoPath}>
+              <div
+                className="card clickable-card"
+                key={s.repoPath}
+                role="button"
+                tabIndex={0}
+                onClick={() => editSkill(s)}
+                onKeyDown={(event) => {
+                  if (event.key === ' ') event.preventDefault()
+                  if (event.key === 'Enter' || event.key === ' ') editSkill(s)
+                }}
+              >
                 <div className="card-title">
                   <Package size={16} color="var(--accent)" />
                   {s.name}
@@ -163,11 +173,18 @@ export default function BrowsePage() {
                   {s.marketplaces?.claude === false && <span className="badge amber">missing Claude</span>}
                   {s.marketplaces?.copilot === true && <span className="badge green">Copilot marketplace</span>}
                   {s.marketplaces?.copilot === false && <span className="badge amber">missing Copilot</span>}
+                  {s.skillsHub?.group && <span className="badge green">Skills Hub: {s.skillsHub.group}</span>}
+                  {s.skillsHub && !s.skillsHub.group && <span className="badge amber">missing Skills Hub</span>}
                   {s.evals?.triggersPath && <span className="badge accent">trigger evals</span>}
                   {s.evals && !s.evals.triggersPath && <span className="badge amber">missing evals</span>}
+                  {s.install?.hermes && <span className="mono">Hermes: {s.install.hermes}</span>}
                   <span className="mono">{s.repoPath}</span>
                 </div>
-                <div className="card-actions">
+                <div
+                  className="card-actions"
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => event.stopPropagation()}
+                >
                   <button className="btn primary small" onClick={() => openInstall(s)}>
                     <Download size={14} /> Install
                   </button>
