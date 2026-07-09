@@ -16,7 +16,9 @@ import {
   readLocalSkill,
   installRepoSkill,
   saveLocalSkill,
-  openSkillDir
+  openSkillDir,
+  diffInstalledSkillAgainstSource,
+  adoptInstalledSkillIntoSource
 } from './skills/local'
 import { scaffoldSkill } from './skills/create'
 import { checkUpdates, updateSkills } from './skills/update'
@@ -83,4 +85,10 @@ export function registerIpc(): void {
     wrap(() => uploadSkillAsPR(args.name, args.files, args.note))
   )
   ipcMain.handle('skills:update', (_e, args: UpdateArgs) => wrap(() => updateSkills(args)))
+  ipcMain.handle('skills:diffInstalled', (_e, args: { repoPath: string; dir: string }) =>
+    wrap(() => diffInstalledSkillAgainstSource(args.repoPath, args.dir))
+  )
+  ipcMain.handle('skills:adoptLocal', (_e, args: { repoPath: string; dir: string }) =>
+    wrap(() => adoptInstalledSkillIntoSource(args.repoPath, args.dir))
+  )
 }

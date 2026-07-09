@@ -13,13 +13,14 @@ const fsSync = require('fs')
 const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
+const { createHash } = require('crypto')
 const matter = require('gray-matter')
 
 const VERSION = '0.1.0'
 const APP_SETTINGS_PATH = path.join(os.homedir(), 'Library/Application Support/skill-ui/skill-ui-settings.json')
 const CLI_CONFIG_PATH = process.env.SKILL_UI_CONFIG || path.join(os.homedir(), '.skill-ui', 'config.json')
 const DEFAULT_SETTINGS = {
-  repoOwner: 'gishamer',
+  repoOwner: '',
   repoName: 'skills',
   repoBranch: 'main',
   repoSkillsPath: '',
@@ -414,30 +415,82 @@ async function readJsonFileIfExists(file) {
   }
 }
 
-async function localRepoContext(cfg) {
-  const root = repoRootFromConfig(cfg)
-  const [claudeMarketplace, copilotMarketplace] = await Promise.all([
-    readJsonFileIfExists(path.join(root, '.claude-plugin', 'marketplace.json')),
-    readJsonFileIfExists(path.join(root, '.github', 'plugin', 'marketplace.json'))
-  ])
-  const pluginSources = (manifest) => {
-    const map = new Map()
-    const plugins = manifest && Array.isArray(manifest.plugins) ? manifest.plugins : []
-    for (const plugin of plugins) {
-      if (plugin && typeof plugin.name === 'string') {
-        map.set(plugin.name, typeof plugin.source === 'string' ? plugin.source.replace(/^\.\//, '') : '')
-      }
+function pluginSources(manifest) {
+  const map = new Map()
+  const plugins = manifest && Array.isArray(manifest.plugins) ? manifest.plugins : []
+  for (const plugin of plugins) {
+    if (plugin && typeof plugin.name === 'string') {
+      map.set(plugin.name, typeof plugin.source === 'string' ? plugin.source.replace(/^\.\//, '') : '')
     }
-    return map
   }
+  return map
+}
+
+function skillsHubGroups(catalog) {
+  const map = new Map()
+  const groupings = catalog && Array.isArray(catalog.groupings) ? catalog.groupings : []
+  for (const group of groupings) {
+    const title = group && typeof group.title === 'string' ? group.title : 'Skills'
+    const skills = group && Array.isArray(group.skills) ? group.skills : []
+    for (const name of skills) if (typeof name === 'string') map.set(name, title)
+  }
+  return map
+}
+
+function treeHas(tree, filePath) {
+  return tree.some((entry) => entry.type === 'blob' && entry.path === filePath)
+}
+
+async function readJsonBlobFromTree(client, cfg, tree, filePath) {
+  const entry = tree.find((item) => item.type === 'blob' && item.path === filePath && item.sha)
+  if (!entry || !entry.sha) return null
+  const blob = await client.git.getBlob({ owner: cfg.repoOwner, repo: cfg.repoName, file_sha: entry.sha })
+  return JSON.parse(Buffer.from(blob.data.content, 'base64').toString('utf8'))
+}
+
+async function remoteRepoContext(client, cfg, tree) {
+  const [claudeMarketplace, copilotMarketplace, skillsHubCatalog] = await Promise.all([
+    readJsonBlobFromTree(client, cfg, tree, '.claude-plugin/marketplace.json'),
+    readJsonBlobFromTree(client, cfg, tree, '.github/plugin/marketplace.json'),
+    readJsonBlobFromTree(client, cfg, tree, 'skills.sh.json')
+  ])
   return {
-    root,
     claudePlugins: pluginSources(claudeMarketplace),
-    copilotPlugins: pluginSources(copilotMarketplace)
+    copilotPlugins: pluginSources(copilotMarketplace),
+    skillsHubGroups: skillsHubGroups(skillsHubCatalog)
   }
 }
 
-function annotateLocalRepoSkill(skill, ctx) {
+function annotateRemoteRepoSkill(skill, ctx, cfg, tree) {
+  const evalPath = `evals/${skill.name}/triggers.yaml`
+  return {
+    ...skill,
+    marketplaces: {
+      claude: ctx.claudePlugins.get(skill.name) === skill.repoPath,
+      copilot: ctx.copilotPlugins.get(skill.name) === skill.repoPath
+    },
+    evals: { triggersPath: treeHas(tree, evalPath) ? evalPath : null },
+    skillsHub: { group: ctx.skillsHubGroups.get(skill.name) || null },
+    install: { hermes: `${cfg.repoOwner}/${cfg.repoName}/${skill.repoPath}` }
+  }
+}
+
+async function localRepoContext(cfg) {
+  const root = repoRootFromConfig(cfg)
+  const [claudeMarketplace, copilotMarketplace, skillsHubCatalog] = await Promise.all([
+    readJsonFileIfExists(path.join(root, '.claude-plugin', 'marketplace.json')),
+    readJsonFileIfExists(path.join(root, '.github', 'plugin', 'marketplace.json')),
+    readJsonFileIfExists(path.join(root, 'skills.sh.json'))
+  ])
+  return {
+    root,
+    claudePlugins: pluginSources(claudeMarketplace),
+    copilotPlugins: pluginSources(copilotMarketplace),
+    skillsHubGroups: skillsHubGroups(skillsHubCatalog)
+  }
+}
+
+function annotateLocalRepoSkill(skill, ctx, cfg) {
   const expectedSource = skill.repoPath
   const evalPath = path.join(ctx.root, 'evals', skill.name, 'triggers.yaml')
   return {
@@ -448,7 +501,9 @@ function annotateLocalRepoSkill(skill, ctx) {
     },
     evals: {
       triggersPath: fsSync.existsSync(evalPath) ? path.relative(ctx.root, evalPath).split(path.sep).join('/') : null
-    }
+    },
+    skillsHub: { group: ctx.skillsHubGroups.get(skill.name) || null },
+    install: { hermes: `${cfg.repoOwner}/${cfg.repoName}/${skill.repoPath}` }
   }
 }
 
@@ -467,7 +522,7 @@ async function listLocalRepoSkills(cfg) {
     if (!fsSync.existsSync(skillMdPath)) continue
     const content = await fs.readFile(skillMdPath, 'utf8')
     const repoPath = repoPathJoin(cfg.repoSkillsPath, entry.name)
-    skills.push(annotateLocalRepoSkill({ ...parseSkillMd(content, entry.name), repoPath }, ctx))
+    skills.push(annotateLocalRepoSkill({ ...parseSkillMd(content, entry.name), repoPath }, ctx, cfg))
   }
   return skills.sort((a, b) => a.name.localeCompare(b.name))
 }
@@ -476,7 +531,7 @@ async function readLocalRepoSkill(cfg, skill) {
   const ctx = await localRepoContext(cfg)
   const skillDir = path.join(ctx.root, skill.repoPath)
   const files = await readSkillDir(skillDir)
-  return { skill: annotateLocalRepoSkill(skill, ctx), files }
+  return { skill: annotateLocalRepoSkill(skill, ctx, cfg), files }
 }
 
 async function doctorRepo(cfg) {
@@ -494,19 +549,51 @@ async function doctorRepo(cfg) {
       claudeMarketplace: 0,
       copilotMarketplace: 0,
       triggerEvals: 0,
+      skillsHub: 0,
       missingClaudeMarketplace: 0,
       missingCopilotMarketplace: 0,
       missingTriggerEvals: 0,
+      missingSkillsHub: 0,
       sourceMismatches: 0,
       extraClaudePlugins: 0,
-      extraCopilotPlugins: 0
+      extraCopilotPlugins: 0,
+      extraSkillsHubEntries: 0
     },
     skills: [],
     issues: []
   }
 
   if (!localMode) {
-    report.issues.push({ severity: 'info', code: 'remote-doctor-limited', message: 'Marketplace and repo-level eval checks require --repo-dir/local checkout mode.' })
+    for (const skill of skills) {
+      const claudeOk = skill.marketplaces?.claude === true
+      const copilotOk = skill.marketplaces?.copilot === true
+      const triggersPath = skill.evals?.triggersPath || null
+      const skillsHubGroup = skill.skillsHub?.group || null
+      const skillIssues = []
+      if (claudeOk) report.counts.claudeMarketplace++
+      else { report.counts.missingClaudeMarketplace++; skillIssues.push('missing-claude-marketplace') }
+      if (copilotOk) report.counts.copilotMarketplace++
+      else { report.counts.missingCopilotMarketplace++; skillIssues.push('missing-copilot-marketplace') }
+      if (triggersPath) report.counts.triggerEvals++
+      else { report.counts.missingTriggerEvals++; skillIssues.push('missing-trigger-evals') }
+      if (skillsHubGroup) report.counts.skillsHub++
+      else { report.counts.missingSkillsHub++; skillIssues.push('missing-skills-hub-grouping') }
+      report.skills.push({
+        name: skill.name,
+        repoPath: skill.repoPath,
+        version: skill.version,
+        marketplaces: { claude: claudeOk, copilot: copilotOk },
+        marketplaceSources: { claude: null, copilot: null },
+        evals: { triggersPath },
+        skillsHub: { group: skillsHubGroup },
+        install: { hermes: skill.install?.hermes || `${cfg.repoOwner}/${cfg.repoName}/${skill.repoPath}` },
+        issues: skillIssues
+      })
+    }
+    for (const skill of report.skills) {
+      for (const issue of skill.issues) report.issues.push({ severity: 'error', code: issue, message: `${skill.name}: ${issue}`, name: skill.name })
+    }
+    report.ok = !report.issues.some((issue) => issue.severity === 'error')
     return report
   }
 
@@ -519,6 +606,7 @@ async function doctorRepo(cfg) {
     const copilotSource = ctx.copilotPlugins.get(skill.name) || null
     const evalPath = path.join(ctx.root, 'evals', skill.name, 'triggers.yaml')
     const triggersPath = fsSync.existsSync(evalPath) ? path.relative(ctx.root, evalPath).split(path.sep).join('/') : null
+    const skillsHubGroup = ctx.skillsHubGroups.get(skill.name) || null
     const skillIssues = []
 
     if (claudeSource === expectedSource || claudeSource === normalizedExpected) report.counts.claudeMarketplace++
@@ -544,6 +632,11 @@ async function doctorRepo(cfg) {
       report.counts.missingTriggerEvals++
       skillIssues.push('missing-trigger-evals')
     }
+    if (skillsHubGroup) report.counts.skillsHub++
+    else {
+      report.counts.missingSkillsHub++
+      skillIssues.push('missing-skills-hub-grouping')
+    }
 
     report.skills.push({
       name: skill.name,
@@ -552,6 +645,8 @@ async function doctorRepo(cfg) {
       marketplaces: { claude: claudeSource === expectedSource || claudeSource === normalizedExpected, copilot: copilotSource === expectedSource || copilotSource === normalizedExpected },
       marketplaceSources: { claude: claudeSource, copilot: copilotSource },
       evals: { triggersPath },
+      skillsHub: { group: skillsHubGroup },
+      install: { hermes: `${cfg.repoOwner}/${cfg.repoName}/${skill.repoPath}` },
       issues: skillIssues
     })
   }
@@ -566,6 +661,12 @@ async function doctorRepo(cfg) {
     if (!skillNames.has(name)) {
       report.counts.extraCopilotPlugins++
       report.issues.push({ severity: 'error', code: 'extra-copilot-plugin', message: `Copilot marketplace lists ${name}, but no matching skill exists.`, name, source })
+    }
+  }
+  for (const [name, group] of ctx.skillsHubGroups.entries()) {
+    if (!skillNames.has(name)) {
+      report.counts.extraSkillsHubEntries++
+      report.issues.push({ severity: 'error', code: 'extra-skills-hub-entry', message: `skills.sh.json lists ${name}, but no matching skill exists.`, name, source: group })
     }
   }
 
@@ -591,6 +692,7 @@ async function listRepoSkills(cfg) {
     throw err
   }
   const prefix = cfg.repoSkillsPath ? cfg.repoSkillsPath.replace(/\/$/, '') + '/' : ''
+  const ctx = await remoteRepoContext(client, cfg, tree)
   const skills = [...bundled]
   for (const entry of tree) {
     if (entry.type !== 'blob' || !entry.path || !entry.sha || !entry.path.endsWith('SKILL.md')) continue
@@ -600,7 +702,7 @@ async function listRepoSkills(cfg) {
     if (!rel || rel.includes('/')) continue
     const blob = await client.git.getBlob({ owner: cfg.repoOwner, repo: cfg.repoName, file_sha: entry.sha })
     const content = Buffer.from(blob.data.content, 'base64').toString('utf8')
-    skills.push({ ...parseSkillMd(content, rel), repoPath: folder })
+    skills.push(annotateRemoteRepoSkill({ ...parseSkillMd(content, rel), repoPath: folder }, ctx, cfg, tree))
   }
   return skills.sort((a, b) => a.name.localeCompare(b.name))
 }
@@ -807,16 +909,72 @@ async function readSkillDir(dir) {
   return out
 }
 
+function filterBundleFiles(files) {
+  const excluded = new Set(['.git', '.loop', 'node_modules', 'out', 'dist', 'evals', 'docs', 'schemas', '.github', '.claude-plugin', '.DS_Store', 'skills.lock.yaml', 'skills.sh.json'])
+  return files
+    .filter((file) => !file.path.split(/[\\/]/).some((part) => excluded.has(part)))
+    .map((file) => ({ ...file, path: file.path.split(path.sep).join('/') }))
+    .sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0)
+}
+
+function hashSkillFiles(files) {
+  const hash = createHash('sha256')
+  for (const file of filterBundleFiles(files)) {
+    hash.update(file.path, 'utf8')
+    hash.update(Buffer.from([0]))
+    hash.update(file.encoding === 'base64' ? Buffer.from(file.content, 'base64') : Buffer.from(file.content, 'utf8'))
+    hash.update(Buffer.from([0]))
+  }
+  return `sha256:${hash.digest('hex')}`
+}
+
 async function writeSkillBundle(targetDir, name, files) {
   const skillDir = path.join(expandHome(targetDir), name)
+  try {
+    const st = await fs.lstat(skillDir)
+    if (st.isSymbolicLink()) throw new CliError(`Refusing to overwrite legacy symlink install: ${skillDir}`)
+    await fs.rm(skillDir, { recursive: true, force: true })
+  } catch (err) {
+    if (!err || err.code !== 'ENOENT') throw err
+  }
   await fs.mkdir(skillDir, { recursive: true })
-  for (const file of files) {
+  for (const file of filterBundleFiles(files)) {
     const dest = path.join(skillDir, file.path)
     await fs.mkdir(path.dirname(dest), { recursive: true })
     const data = file.encoding === 'base64' ? Buffer.from(file.content, 'base64') : Buffer.from(file.content, 'utf8')
     await fs.writeFile(dest, data)
   }
   return skillDir
+}
+
+function cliReceiptPath(client, skill) {
+  const root = process.env.SKILL_UI_RECEIPTS_DIR || path.join(process.env.SKILL_UI_HOME || path.join(os.homedir(), '.skill-ui'), 'receipts')
+  const safe = (value) => String(value).replace(/[^a-zA-Z0-9._-]/g, '_')
+  return path.join(root, safe(client), `${safe(skill)}.json`)
+}
+
+async function writeCliReceipt({ client, skill, cfg, repoPath, sourceBundleHash, installedDir, installedBundleHash }) {
+  const now = new Date().toISOString()
+  const receipt = {
+    schemaVersion: 1,
+    client,
+    skill,
+    sourceRepo: `${cfg.repoOwner}/${cfg.repoName}`,
+    sourcePath: repoPath,
+    sourceRef: cfg.repoBranch || '',
+    sourceCommit: null,
+    sourceBundleHash,
+    installMethod: 'managed-copy',
+    marketplaceName: null,
+    installedPaths: [installedDir],
+    installedBundleHash,
+    installedAt: now,
+    updatedAt: now
+  }
+  const dest = cliReceiptPath(client, skill)
+  await fs.mkdir(path.dirname(dest), { recursive: true })
+  await fs.writeFile(dest, JSON.stringify(receipt, null, 2) + '\n', { mode: 0o600 })
+  return receipt
 }
 
 function expandHome(value) {
@@ -1025,7 +1183,12 @@ async function main(argv) {
     const { skill, files } = await downloadSkill(cfg, name)
     const target = opts.target || cfg.customSkillsDir || path.join(os.homedir(), '.hermes', 'skills')
     const installedDir = await writeSkillBundle(target, skill.name, files)
-    return opts.json ? printJson({ installedDir, skill }) : console.log(`Installed ${skill.name} to ${installedDir}`)
+    const sourceBundleHash = hashSkillFiles(files)
+    const installedBundleHash = hashSkillFiles(await readSkillDir(installedDir))
+    if (installedBundleHash !== sourceBundleHash) throw new CliError(`Post-install verification failed: ${installedBundleHash} != ${sourceBundleHash}`)
+    const client = target.includes('.claude') ? 'claude' : target.includes('.copilot') ? 'copilot' : target.includes('.hermes') ? 'hermes' : 'custom'
+    const receipt = await writeCliReceipt({ client, skill: skill.name, cfg, repoPath: skill.repoPath, sourceBundleHash, installedDir, installedBundleHash })
+    return opts.json ? printJson({ installedDir, skill, receipt }) : console.log(`Installed ${skill.name} to ${installedDir}`)
   }
 
   if (command === 'scaffold') {

@@ -1,4 +1,4 @@
-import { dirname, basename } from 'path'
+import { basename } from 'path'
 import type {
   LocalSkill,
   RepoSkill,
@@ -6,9 +6,11 @@ import type {
   UpdateReport,
   UpdateStatus
 } from '@shared/types'
-import { compareVersions } from './frontmatter'
-import { listLocalSkills, writeSkillBundle } from './local'
+import { listLocalSkills, updateInstalledSkill } from './local'
 import { listRepoSkills, downloadSkill } from '../github'
+import { hashSkillFiles } from './bundle'
+import { readReceipt } from './receipts'
+import { classifyInstallState, nativeStateToLegacyUpdateState } from './status'
 
 /** Build a lookup of repo skills keyed by both frontmatter name and folder name. */
 function indexRepo(repo: RepoSkill[]): Map<string, RepoSkill> {
@@ -21,29 +23,53 @@ function indexRepo(repo: RepoSkill[]): Map<string, RepoSkill> {
 }
 
 /** Decide whether a local skill is outdated relative to its repo counterpart. */
-export function computeStatus(local: LocalSkill, repo?: RepoSkill): UpdateStatus {
+export async function computeStatus(local: LocalSkill, repo?: RepoSkill): Promise<UpdateStatus> {
   if (!repo) {
     return { state: 'not-in-repo', localVersion: local.version, repoVersion: null }
   }
-  let outdated: boolean
-  if (local.version && repo.version) {
-    outdated = compareVersions(repo.version, local.version) > 0
-  } else {
-    // No reliable versions on one side: fall back to content hash of SKILL.md.
-    outdated = local.hash !== repo.hash
-  }
+  const sourceFiles = await downloadSkill(repo.repoPath)
+  const sourceBundleHash = hashSkillFiles(sourceFiles)
+  const receipt = local.receipt ?? (await readReceipt(local.clientId, local.name))
+  const nativeState = classifyInstallState({
+    installedDetected: true,
+    installedInspectable: !!local.installedBundleHash,
+    currentRepoHash: sourceBundleHash,
+    installedHash: local.installedBundleHash ?? null,
+    receipt,
+    legacySymlink: local.nativeState === 'legacy-symlink'
+  })
   return {
-    state: outdated ? 'outdated' : 'up-to-date',
+    state: nativeStateToLegacyUpdateState(nativeState),
     localVersion: local.version,
-    repoVersion: repo.version
+    repoVersion: repo.version,
+    sourceBundleHash,
+    installedBundleHash: local.installedBundleHash ?? null,
+    receiptBundleHash: receipt?.sourceBundleHash ?? null
   }
+}
+
+function nativeStateFromUpdate(state: UpdateStatus['state']): LocalSkill['nativeState'] {
+  if (state === 'up-to-date') return 'current'
+  if (state === 'not-in-repo') return 'not-installed'
+  if (state === 'unmanaged') return 'unmanaged-outdated'
+  return state
 }
 
 /** Annotate local skills with their update status against the repository. */
 export async function checkUpdates(): Promise<LocalSkill[]> {
   const [local, repo] = await Promise.all([listLocalSkills(), listRepoSkills()])
   const index = indexRepo(repo)
-  return local.map((s) => ({ ...s, update: computeStatus(s, index.get(s.name) ?? index.get(basename(s.dir))) }))
+  const annotated: LocalSkill[] = []
+  for (const skill of local) {
+    const repoSkill = index.get(skill.name) ?? index.get(basename(skill.dir))
+    const update = await computeStatus(skill, repoSkill)
+    annotated.push({
+      ...skill,
+      update,
+      nativeState: skill.nativeState ?? nativeStateFromUpdate(update.state)
+    })
+  }
+  return annotated
 }
 
 /**
@@ -63,6 +89,7 @@ export async function updateSkills(args: UpdateArgs): Promise<UpdateReport> {
   }
 
   const report: UpdateReport = { updated: [], skipped: [] }
+  const safeToOverwrite = new Set(['outdated', 'not-in-repo'])
 
   for (const skill of candidates) {
     const repoSkill = index.get(skill.name) ?? index.get(basename(skill.dir))
@@ -70,18 +97,26 @@ export async function updateSkills(args: UpdateArgs): Promise<UpdateReport> {
       report.skipped.push({ name: skill.name, dir: skill.dir, reason: 'Not found in repository' })
       continue
     }
-    if (skill.update?.state === 'up-to-date') {
+    const state = skill.update?.state ?? 'unknown'
+    if (state === 'up-to-date') {
       report.skipped.push({ name: skill.name, dir: skill.dir, reason: 'Already up to date' })
       continue
     }
+    if (!safeToOverwrite.has(state)) {
+      report.skipped.push({
+        name: skill.name,
+        dir: skill.dir,
+        reason: `Refusing to overwrite ${state} install without review/adopt action`
+      })
+      continue
+    }
     try {
-      const files = await downloadSkill(repoSkill.repoPath)
-      await writeSkillBundle(dirname(skill.dir), basename(skill.dir), files)
+      await updateInstalledSkill(repoSkill.repoPath, skill.dir)
       report.updated.push({
         name: skill.name,
         dir: skill.dir,
-        from: skill.update?.localVersion ?? null,
-        to: repoSkill.version
+        from: skill.update?.installedBundleHash ?? skill.update?.localVersion ?? null,
+        to: skill.update?.sourceBundleHash ?? repoSkill.version
       })
     } catch (err) {
       report.skipped.push({

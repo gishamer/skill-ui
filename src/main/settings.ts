@@ -18,8 +18,8 @@ interface StoreShape {
 const store = new Store<StoreShape>({
   name: 'skill-ui-settings',
   defaults: {
-    repoOwner: 'gishamer',
-    repoName: 'skills',
+    repoOwner: '',
+    repoName: '',
     repoBranch: 'main',
     repoSkillsPath: '',
     repoDir: '',

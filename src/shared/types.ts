@@ -42,6 +42,14 @@ export interface RepoSkill extends SkillMeta {
   evals?: {
     triggersPath: string | null
   }
+  /** skills.sh catalog grouping annotation when available. */
+  skillsHub?: {
+    group: string | null
+  }
+  /** Ready-to-copy install identifiers for supported clients. */
+  install?: {
+    hermes: string
+  }
 }
 
 export interface RepoDoctorIssue {
@@ -67,6 +75,12 @@ export interface RepoDoctorSkill {
   evals: {
     triggersPath: string | null
   }
+  skillsHub: {
+    group: string | null
+  }
+  install: {
+    hermes: string
+  }
   issues: string[]
 }
 
@@ -82,15 +96,97 @@ export interface RepoDoctorReport {
     claudeMarketplace: number
     copilotMarketplace: number
     triggerEvals: number
+    skillsHub: number
     missingClaudeMarketplace: number
     missingCopilotMarketplace: number
     missingTriggerEvals: number
+    missingSkillsHub: number
     sourceMismatches: number
     extraClaudePlugins: number
     extraCopilotPlugins: number
+    extraSkillsHubEntries: number
   }
   skills: RepoDoctorSkill[]
   issues: RepoDoctorIssue[]
+}
+
+export type ClientId = 'hermes' | 'claude' | 'copilot' | 'npx-skills' | 'custom'
+
+export type InstallMethod = 'native' | 'managed-copy'
+
+export type NativeInstallState =
+  | 'not-installed'
+  | 'current'
+  | 'outdated'
+  | 'locally-modified'
+  | 'diverged'
+  | 'unmanaged-current'
+  | 'unmanaged-outdated'
+  | 'unmanaged-modified'
+  | 'unknown'
+  | 'blocked'
+  | 'unsupported'
+  | 'legacy-symlink'
+
+export interface InstallReceipt {
+  schemaVersion: 1
+  client: ClientId | string
+  skill: string
+  sourceRepo: string
+  sourcePath: string
+  sourceRef: string
+  sourceCommit: string | null
+  sourceBundleHash: string
+  installMethod: InstallMethod
+  marketplaceName: string | null
+  installedPaths: string[]
+  installedBundleHash: string | null
+  installedAt: string
+  updatedAt: string
+}
+
+export interface ClientEnvironmentStatus {
+  status: 'ok' | 'blocked' | 'unsupported'
+  message?: string
+}
+
+export interface SourceSkillRef {
+  name: string
+  repoPath: string
+  files: SkillFile[]
+}
+
+export interface InstalledBundleLocation {
+  path: string
+  inspectable: boolean
+  legacySymlink?: boolean
+}
+
+export interface InstallResult {
+  ok: boolean
+  method: InstallMethod
+  installedPath?: string
+  installedBundleHash?: string | null
+  output?: string
+  error?: string
+}
+
+export interface ClientAdapter {
+  id: ClientId
+  displayName: string
+  targetDir?: string
+  installMethod: InstallMethod
+  capabilities: {
+    nativeInstall: boolean
+    nativeUpdate: boolean
+    inspectInstalledBundle: boolean
+    listInstalledSkills: boolean
+    importLocalChanges: boolean
+  }
+  detectEnvironment: () => Promise<ClientEnvironmentStatus>
+  locateInstalledBundle: (skillName: string) => Promise<InstalledBundleLocation | null>
+  install: (skill: SourceSkillRef) => Promise<InstallResult>
+  update: (skill: SourceSkillRef) => Promise<InstallResult>
 }
 
 /** A skill installed into one of the local client directories. */
@@ -99,16 +195,35 @@ export interface LocalSkill extends SkillMeta {
   clientId: string
   /** Absolute path to the installed skill folder. */
   dir: string
+  /** Native synchronization state compared against repository, receipt, and installed bundle. */
+  nativeState?: NativeInstallState
+  /** Hash of the installed bundle when inspectable. */
+  installedBundleHash?: string | null
+  /** Last Skill UI receipt for this client/skill pair. */
+  receipt?: InstallReceipt | null
   /** Update status compared against the repository, computed on demand. */
   update?: UpdateStatus
 }
 
-export type UpdateState = 'up-to-date' | 'outdated' | 'not-in-repo' | 'unknown'
+export type UpdateState =
+  | 'up-to-date'
+  | 'outdated'
+  | 'not-in-repo'
+  | 'unknown'
+  | 'locally-modified'
+  | 'diverged'
+  | 'unmanaged'
+  | 'blocked'
+  | 'unsupported'
+  | 'legacy-symlink'
 
 export interface UpdateStatus {
   state: UpdateState
   localVersion: string | null
   repoVersion: string | null
+  sourceBundleHash?: string | null
+  installedBundleHash?: string | null
+  receiptBundleHash?: string | null
 }
 
 /** A single file inside a skill folder (relative path + utf8/base64 content). */
@@ -227,6 +342,25 @@ export interface UpdateReport {
   skipped: { name: string; dir: string; reason: string }[]
 }
 
+export interface InstalledDiffArgs {
+  repoPath: string
+  dir: string
+}
+
+export interface InstalledDiffResult {
+  text: string
+  added: string[]
+  removed: string[]
+  changed: string[]
+}
+
+export interface AdoptLocalArgs extends InstalledDiffArgs {}
+
+export interface AdoptLocalResult {
+  adoptedPath: string
+  files: string[]
+}
+
 /** The full API surface exposed to the renderer via the preload bridge. */
 export interface SkillUiApi {
   settings: {
@@ -259,5 +393,7 @@ export interface SkillUiApi {
     saveLocal: (args: SaveLocalArgs) => Promise<IpcResult<{ installed: string[] }>>
     upload: (args: UploadArgs) => Promise<IpcResult<UploadResult>>
     update: (args: UpdateArgs) => Promise<IpcResult<UpdateReport>>
+    diffInstalled: (args: InstalledDiffArgs) => Promise<IpcResult<InstalledDiffResult>>
+    adoptLocal: (args: AdoptLocalArgs) => Promise<IpcResult<AdoptLocalResult>>
   }
 }

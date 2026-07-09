@@ -110,7 +110,7 @@ export default function SettingsPage() {
       <div className="row" style={{ gap: 12 }}>
         <div className="field" style={{ flex: 1 }}>
           <label>Owner</label>
-          <input type="text" value={repoOwner} onChange={(e) => setRepoOwner(e.target.value)} placeholder="gishamer" />
+          <input type="text" value={repoOwner} onChange={(e) => setRepoOwner(e.target.value)} placeholder="owner-or-org" />
         </div>
         <div className="field" style={{ flex: 1 }}>
           <label>Repository</label>

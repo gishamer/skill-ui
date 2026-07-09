@@ -112,7 +112,7 @@ export default function BrowsePage() {
           <div className="banner-text">
             <strong>Repo health: {health.ok ? 'OK' : `${health.issues.filter((i) => i.severity === 'error').length} issue(s)`}</strong>
             <span>
-              {health.counts.skills} skills · {health.counts.claudeMarketplace} Claude marketplace · {health.counts.copilotMarketplace} Copilot marketplace · {health.counts.triggerEvals} trigger evals · {health.mode} mode
+              {health.counts.skills} skills · {health.counts.claudeMarketplace} Claude marketplace · {health.counts.copilotMarketplace} Copilot marketplace · {health.counts.skillsHub} Skills Hub · {health.counts.triggerEvals} trigger evals · {health.mode} mode
             </span>
             {!health.ok && health.issues.slice(0, 3).map((issue) => (
               <span key={`${issue.code}-${issue.name ?? issue.message}`} className="mono">{issue.code}: {issue.name ?? issue.message}</span>
@@ -173,8 +173,11 @@ export default function BrowsePage() {
                   {s.marketplaces?.claude === false && <span className="badge amber">missing Claude</span>}
                   {s.marketplaces?.copilot === true && <span className="badge green">Copilot marketplace</span>}
                   {s.marketplaces?.copilot === false && <span className="badge amber">missing Copilot</span>}
+                  {s.skillsHub?.group && <span className="badge green">Skills Hub: {s.skillsHub.group}</span>}
+                  {s.skillsHub && !s.skillsHub.group && <span className="badge amber">missing Skills Hub</span>}
                   {s.evals?.triggersPath && <span className="badge accent">trigger evals</span>}
                   {s.evals && !s.evals.triggersPath && <span className="badge amber">missing evals</span>}
+                  {s.install?.hermes && <span className="mono">Hermes: {s.install.hermes}</span>}
                   <span className="mono">{s.repoPath}</span>
                 </div>
                 <div
