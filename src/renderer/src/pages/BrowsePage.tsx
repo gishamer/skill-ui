@@ -147,7 +147,17 @@ export default function BrowsePage() {
           {skills.map((s) => {
             const bundled = s.repoPath.startsWith('builtin/')
             return (
-              <div className="card" key={s.repoPath}>
+              <div
+                className="card clickable-card"
+                key={s.repoPath}
+                role="button"
+                tabIndex={0}
+                onClick={() => editSkill(s)}
+                onKeyDown={(event) => {
+                  if (event.key === ' ') event.preventDefault()
+                  if (event.key === 'Enter' || event.key === ' ') editSkill(s)
+                }}
+              >
                 <div className="card-title">
                   <Package size={16} color="var(--accent)" />
                   {s.name}
@@ -167,7 +177,11 @@ export default function BrowsePage() {
                   {s.evals && !s.evals.triggersPath && <span className="badge amber">missing evals</span>}
                   <span className="mono">{s.repoPath}</span>
                 </div>
-                <div className="card-actions">
+                <div
+                  className="card-actions"
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => event.stopPropagation()}
+                >
                   <button className="btn primary small" onClick={() => openInstall(s)}>
                     <Download size={14} /> Install
                   </button>

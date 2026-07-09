@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Download, UploadCloud, FileCode, AlertCircle } from 'lucide-react'
 import type { SkillBundle, SkillFile } from '@shared/types'
 import { api, unwrap } from '../api'
@@ -6,6 +6,16 @@ import { useApp } from '../context'
 import Modal from './Modal'
 import TargetPicker from './TargetPicker'
 import { Spinner } from './Spinner'
+import SkillFrontmatterForm from './SkillFrontmatterForm'
+import {
+  parseSkillMd,
+  serializeSkillMd,
+  slugify,
+  validateFrontmatter,
+  type FrontmatterData,
+  type FrontmatterValue,
+  type JsonErrorMap
+} from '../lib/skillFrontmatter'
 
 interface SkillEditorProps {
   bundle: SkillBundle
@@ -13,20 +23,20 @@ interface SkillEditorProps {
   nameEditable: boolean
 }
 
-function slugify(input: string): string {
-  return input.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-}
-
 export default function SkillEditor({ bundle, nameEditable }: SkillEditorProps) {
   const { clients, toast } = useApp()
-  const [name, setName] = useState(bundle.meta.name)
   const initialSkillMd = bundle.files.find((f) => f.path === 'SKILL.md')?.content ?? ''
-  const [skillMd, setSkillMd] = useState(initialSkillMd)
+  const initialParts = useMemo(() => parseSkillMd(initialSkillMd, bundle), [bundle, initialSkillMd])
 
-  const otherFiles = useMemo(
-    () => bundle.files.filter((f) => f.path !== 'SKILL.md'),
-    [bundle.files]
-  )
+  const [frontmatter, setFrontmatter] = useState<FrontmatterData>(initialParts.frontmatter)
+  const [skillBody, setSkillBody] = useState(initialParts.body)
+
+  useEffect(() => {
+    setFrontmatter(initialParts.frontmatter)
+    setSkillBody(initialParts.body)
+    setValidationErrors([])
+    setJsonErrors({})
+  }, [initialParts])
 
   const [installOpen, setInstallOpen] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
@@ -35,20 +45,50 @@ export default function SkillEditor({ bundle, nameEditable }: SkillEditorProps) 
   )
   const [note, setNote] = useState('')
   const [validationErrors, setValidationErrors] = useState<string[]>([])
+  const [jsonErrors, setJsonErrors] = useState<JsonErrorMap>({})
   const [busy, setBusy] = useState(false)
 
+  const otherFiles = useMemo(
+    () => bundle.files.filter((f) => f.path !== 'SKILL.md'),
+    [bundle.files]
+  )
+  const rawName = String(frontmatter.name ?? '')
+  const effectiveName = nameEditable ? slugify(rawName) : rawName
+  const formErrors = useMemo(
+    () => validateFrontmatter(frontmatter, effectiveName, jsonErrors),
+    [effectiveName, frontmatter, jsonErrors]
+  )
+
+  function setFrontmatterField(key: string, value: FrontmatterValue) {
+    setValidationErrors([])
+    setFrontmatter((current) => ({ ...current, [key]: value }))
+  }
+
+  function setSkillBodyContent(value: string) {
+    setValidationErrors([])
+    setSkillBody(value)
+  }
+
+  function setJsonError(id: string, message: string | null) {
+    setJsonErrors((current) => {
+      const next = { ...current }
+      if (message) next[id] = message
+      else delete next[id]
+      return next
+    })
+  }
+
   function buildFiles(): SkillFile[] {
-    const md: SkillFile = { path: 'SKILL.md', content: skillMd, encoding: 'utf8' }
+    const md: SkillFile = {
+      path: 'SKILL.md',
+      content: serializeSkillMd({ ...frontmatter, name: effectiveName }, skillBody),
+      encoding: 'utf8'
+    }
     return [md, ...otherFiles]
   }
 
-  const effectiveName = nameEditable ? slugify(name) : name
-
   async function validateForUpload(): Promise<boolean> {
-    if (!effectiveName) {
-      setValidationErrors(['Please provide a skill name.'])
-      return false
-    }
+    if (formErrors.length > 0) return false
     const result = await unwrap(api.skills.validate({ name: effectiveName, files: buildFiles() }))
     setValidationErrors(result.errors)
     return result.valid
@@ -67,9 +107,13 @@ export default function SkillEditor({ bundle, nameEditable }: SkillEditorProps) 
   }
 
   async function doInstall() {
-    if (!effectiveName) return toast({ kind: 'error', message: 'Please provide a skill name.' })
-    if (selectedTargets.length === 0)
+    if (formErrors.length > 0) {
+      return toast({ kind: 'error', message: 'Please fix the frontmatter form before installing.' })
+    }
+    if (selectedTargets.length === 0) {
       return toast({ kind: 'error', message: 'Select at least one target directory.' })
+    }
+
     setBusy(true)
     try {
       const res = await unwrap(
@@ -92,6 +136,7 @@ export default function SkillEditor({ bundle, nameEditable }: SkillEditorProps) 
     if (!valid) {
       return toast({ kind: 'error', message: 'Please fix the skill validation issues before opening a pull request.' })
     }
+
     setBusy(true)
     try {
       const res = await unwrap(
@@ -120,31 +165,25 @@ export default function SkillEditor({ bundle, nameEditable }: SkillEditorProps) 
 
   return (
     <div>
-      <div className="field">
-        <label>Skill name</label>
-        <input
-          type="text"
-          value={name}
-          disabled={!nameEditable}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="my-skill"
-        />
-        {nameEditable && effectiveName !== name && (
-          <span className="hint">Folder will be: {effectiveName || '—'}</span>
-        )}
-      </div>
+      <SkillFrontmatterForm
+        frontmatter={frontmatter}
+        effectiveName={effectiveName}
+        nameEditable={nameEditable}
+        errors={formErrors}
+        onChange={setFrontmatterField}
+        onJsonError={setJsonError}
+      />
 
       <div className="field">
-        <label>SKILL.md</label>
+        <label>SKILL.md content</label>
         <span className="hint">
-          Paste existing work, or edit the scaffolded template. Frontmatter drives the skill name,
-          description and <span className="mono">metadata.organization.version</span> used for updates.
+          Edit only the Markdown body here. Frontmatter is managed by the form above and reconstructed on install/upload.
         </span>
         <textarea
           className="code"
-          value={skillMd}
+          value={skillBody}
           spellCheck={false}
-          onChange={(e) => setSkillMd(e.target.value)}
+          onChange={(event) => setSkillBodyContent(event.target.value)}
         />
       </div>
 
@@ -166,11 +205,23 @@ export default function SkillEditor({ bundle, nameEditable }: SkillEditorProps) 
         </div>
       )}
 
+      {validationErrors.length > 0 && (
+        <div className="banner warn" style={{ alignItems: 'flex-start', marginTop: 12 }}>
+          <AlertCircle size={18} color="var(--amber)" />
+          <div className="banner-text">
+            <strong>Validation issues</strong>
+            <ul className="validation-list">
+              {validationErrors.map((error) => <li key={error}>{error}</li>)}
+            </ul>
+          </div>
+        </div>
+      )}
+
       <div className="row" style={{ marginTop: 18 }}>
-        <button className="btn primary" onClick={() => setInstallOpen(true)}>
+        <button className="btn primary" onClick={() => setInstallOpen(true)} disabled={formErrors.length > 0}>
           <Download size={15} /> Install locally
         </button>
-        <button className="btn" onClick={openUploadModal} disabled={busy}>
+        <button className="btn" onClick={openUploadModal} disabled={busy || formErrors.length > 0}>
           <UploadCloud size={15} /> Upload to repository
         </button>
       </div>
@@ -185,7 +236,7 @@ export default function SkillEditor({ bundle, nameEditable }: SkillEditorProps) 
               <button className="btn ghost" onClick={() => setInstallOpen(false)} disabled={busy}>
                 Cancel
               </button>
-              <button className="btn primary" onClick={doInstall} disabled={busy}>
+              <button className="btn primary" onClick={doInstall} disabled={busy || formErrors.length > 0}>
                 {busy ? <Spinner /> : <Download size={15} />} Install
               </button>
             </>
@@ -205,24 +256,14 @@ export default function SkillEditor({ bundle, nameEditable }: SkillEditorProps) 
               <button className="btn ghost" onClick={() => setUploadOpen(false)} disabled={busy}>
                 Cancel
               </button>
-              <button className="btn primary" onClick={doUpload} disabled={busy || validationErrors.length > 0}>
+              <button className="btn primary" onClick={doUpload} disabled={busy || validationErrors.length > 0 || formErrors.length > 0}>
                 {busy ? <Spinner /> : <UploadCloud size={15} />} Open pull request
               </button>
             </>
           }
         >
           {validationErrors.length > 0 ? (
-            <div className="banner warn" style={{ alignItems: 'flex-start', marginBottom: 14 }}>
-              <AlertCircle size={18} color="var(--amber)" />
-              <div className="banner-text">
-                <strong>This skill needs a few fixes before it can be uploaded</strong>
-                <ul className="validation-list">
-                  {validationErrors.map((error) => (
-                    <li key={error}>{error}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
+            <ValidationSummary errors={validationErrors} />
           ) : (
             <div className="banner" style={{ marginBottom: 14 }}>
               <FileCode size={18} color="var(--green)" />
@@ -244,6 +285,20 @@ export default function SkillEditor({ bundle, nameEditable }: SkillEditorProps) 
           </div>
         </Modal>
       )}
+    </div>
+  )
+}
+
+function ValidationSummary({ errors }: { errors: string[] }) {
+  return (
+    <div className="banner warn" style={{ alignItems: 'flex-start', marginBottom: 14 }}>
+      <AlertCircle size={18} color="var(--amber)" />
+      <div className="banner-text">
+        <strong>This skill needs a few fixes before it can be uploaded</strong>
+        <ul className="validation-list">
+          {errors.map((error) => <li key={error}>{error}</li>)}
+        </ul>
+      </div>
     </div>
   )
 }
