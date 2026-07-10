@@ -6,7 +6,8 @@ import type {
   UploadArgs,
   UpdateArgs,
   AppSettings,
-  SkillFile
+  SkillFile,
+  ScaffoldSkillArgs
 } from '@shared/types'
 import { getSettings, setSettings } from './settings'
 import { detectClients } from './clients'
@@ -72,7 +73,7 @@ export function registerIpc(): void {
   ipcMain.handle('skills:install', (_e, args: InstallArgs) =>
     wrap(async () => ({ installed: await installRepoSkill(args.repoPath, args.targetDirs) }))
   )
-  ipcMain.handle('skills:scaffold', (_e, args: string | { name: string; owner?: string; lifecycle?: string }) =>
+  ipcMain.handle('skills:scaffold', (_e, args: string | ScaffoldSkillArgs) =>
     wrap(() => scaffoldSkill(args))
   )
   ipcMain.handle('skills:validate', (_e, args: { name: string; files: SkillFile[] }) =>

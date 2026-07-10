@@ -6,7 +6,8 @@ import type {
   SaveLocalArgs,
   UploadArgs,
   UpdateArgs,
-  RemoteSkillArgs
+  RemoteSkillArgs,
+  ScaffoldSkillArgs
 } from '@shared/types'
 
 const api: SkillUiApi = {
@@ -36,7 +37,7 @@ const api: SkillUiApi = {
   },
   skills: {
     install: (args: InstallArgs) => ipcRenderer.invoke('skills:install', args),
-    scaffold: (args: string | { name: string; owner?: string; lifecycle?: string }) =>
+    scaffold: (args: string | ScaffoldSkillArgs) =>
       ipcRenderer.invoke('skills:scaffold', args),
     validate: (args) => ipcRenderer.invoke('skills:validate', args),
     saveLocal: (args: SaveLocalArgs) => ipcRenderer.invoke('skills:saveLocal', args),

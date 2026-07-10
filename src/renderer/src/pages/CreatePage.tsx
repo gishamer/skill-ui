@@ -1,16 +1,34 @@
 import { useState } from 'react'
 import { Sparkles, ArrowLeft, FolderOpen, CloudDownload } from 'lucide-react'
-import type { SkillBundle } from '@shared/types'
+import type { ScaffoldSkillArgs, SkillBundle } from '@shared/types'
 import { api, unwrap } from '../api'
 import { useApp } from '../context'
 import { Spinner } from '../components/Spinner'
 import SkillEditor from '../components/SkillEditor'
+
+const LIFECYCLES = ['experimental', 'review', 'active', 'maintain', 'deprecated', 'archived']
+const CHANNELS = ['developer', 'runtime']
+
+function parseChannels(text: string): string[] {
+  return text.split(',').map((item) => item.trim()).filter(Boolean)
+}
+
+function optionalNumber(text: string): number | undefined {
+  const value = Number(text)
+  return Number.isFinite(value) && value > 0 ? value : undefined
+}
 
 export default function CreatePage() {
   const { settings, toast } = useApp()
   const [name, setName] = useState('')
   const [createOwner, setCreateOwner] = useState(settings.skillDefaults.owner || '@your-org/your-team')
   const [createLifecycle, setCreateLifecycle] = useState(String(settings.skillDefaults.lifecycle || 'experimental'))
+  const [createVersion, setCreateVersion] = useState(settings.skillDefaults.version || '0.1.0')
+  const [createReviewInterval, setCreateReviewInterval] = useState(String(settings.skillDefaults.reviewIntervalDays || 180))
+  const [createChannels, setCreateChannels] = useState((settings.skillDefaults.channels || ['developer']).join(', '))
+  const [createAuthor, setCreateAuthor] = useState('')
+  const [createLicense, setCreateLicense] = useState('MIT')
+  const [createSourceType, setCreateSourceType] = useState('internal')
   const [remoteUrl, setRemoteUrl] = useState('')
   const [remoteName, setRemoteName] = useState('')
   const [remoteOwner, setRemoteOwner] = useState(settings.skillDefaults.owner || '@your-org/your-team')
@@ -22,13 +40,18 @@ export default function CreatePage() {
     if (!name.trim()) return toast({ kind: 'error', message: 'Enter a name for the skill.' })
     setBusy(true)
     try {
-      const result = await unwrap(
-        api.skills.scaffold({
-          name: name.trim(),
-          owner: createOwner.trim() || undefined,
-          lifecycle: createLifecycle
-        })
-      )
+      const scaffoldArgs: ScaffoldSkillArgs = {
+        name: name.trim(),
+        owner: createOwner.trim() || undefined,
+        lifecycle: createLifecycle,
+        version: createVersion.trim() || undefined,
+        reviewIntervalDays: optionalNumber(createReviewInterval),
+        channels: parseChannels(createChannels),
+        author: createAuthor.trim() || undefined,
+        license: createLicense.trim() || undefined,
+        sourceType: createSourceType.trim() || undefined
+      }
+      const result = await unwrap(api.skills.scaffold(scaffoldArgs))
       setBundle(result)
       toast({ kind: 'info', message: `Scaffolded “${result.meta.name}”. Edit it below.` })
     } catch (err) {
@@ -130,7 +153,7 @@ export default function CreatePage() {
           />
         </div>
         <div className="row" style={{ gap: 12 }}>
-          <div className="field" style={{ flex: 1 }}>
+          <div className="field" style={{ flex: 1 }} title="Owning team or maintainer written to metadata.organization.owner.">
             <label>Internal owner</label>
             <input
               type="text"
@@ -138,19 +161,48 @@ export default function CreatePage() {
               placeholder="@your-org/your-team"
               onChange={(e) => setCreateOwner(e.target.value)}
             />
+            <span className="hint">Who reviews and maintains this skill.</span>
           </div>
-          <div className="field" style={{ maxWidth: 220 }}>
+          <div className="field" style={{ maxWidth: 220 }} title="Lifecycle communicates maturity. Use active only after review.">
             <label>Lifecycle</label>
             <select value={createLifecycle} onChange={(e) => setCreateLifecycle(e.target.value)}>
-              <option value="experimental">experimental</option>
-              <option value="review">review</option>
-              <option value="active">active</option>
-              <option value="maintain">maintain</option>
-              <option value="deprecated">deprecated</option>
-              <option value="archived">archived</option>
+              {LIFECYCLES.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
+            <span className="hint">Start with experimental or review.</span>
           </div>
         </div>
+
+        <details className="metadata-details">
+          <summary title="Adjust optional metadata before the SKILL.md file is generated.">Skill metadata defaults</summary>
+          <div className="frontmatter-grid" style={{ marginTop: 12 }}>
+            <div className="field" title="Initial semantic version written to metadata.organization.version.">
+              <label>Version</label>
+              <input type="text" value={createVersion} placeholder="0.1.0" onChange={(e) => setCreateVersion(e.target.value)} />
+            </div>
+            <div className="field" title="How often the owner should review this skill, in days.">
+              <label>Review interval days</label>
+              <input type="number" min="1" value={createReviewInterval} onChange={(e) => setCreateReviewInterval(e.target.value)} />
+            </div>
+            <div className="field" title="Comma-separated publication/consumer channels. Common values: developer, runtime.">
+              <label>Channels</label>
+              <input type="text" value={createChannels} onChange={(e) => setCreateChannels(e.target.value)} />
+              <span className="hint">Common: {CHANNELS.join(', ')}.</span>
+            </div>
+            <div className="field" title="Optional top-level author field. Leave blank to omit it.">
+              <label>Author</label>
+              <input type="text" value={createAuthor} placeholder="Author or team" onChange={(e) => setCreateAuthor(e.target.value)} />
+            </div>
+            <div className="field" title="Optional top-level license field. Use an SPDX identifier when possible.">
+              <label>License</label>
+              <input type="text" value={createLicense} placeholder="MIT" onChange={(e) => setCreateLicense(e.target.value)} />
+            </div>
+            <div className="field" title="Optional provenance marker written to metadata.organization.source_type.">
+              <label>Source type</label>
+              <input type="text" value={createSourceType} placeholder="internal" onChange={(e) => setCreateSourceType(e.target.value)} />
+              <span className="hint">Use internal for newly-authored skills.</span>
+            </div>
+          </div>
+        </details>
         <span className="hint">
           Import a folder when your skill already has supporting files such as{' '}
           <span className="mono">references/</span>, <span className="mono">scripts/</span> or{' '}
