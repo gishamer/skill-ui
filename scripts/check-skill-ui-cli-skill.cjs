@@ -9,6 +9,8 @@ const content = fs.readFileSync(skillPath, 'utf8')
 
 for (const expected of [
   'full shared agent skill bundles',
+  'discover/list available skills',
+  'compare descriptions to the current task',
   'skill-ui.config.json',
   '--skill-version',
   '--review-interval',
@@ -19,7 +21,9 @@ for (const expected of [
   'skill-ui doctor --json',
   'metadata.organization.owner',
   'Remote imports preserve upstream files',
-  'Preserve support folders'
+  'Preserve support folders',
+  'installed/downloaded repository skill',
+  'opens a pull request against the configured skill repository'
 ]) {
   assert(content.includes(expected), `skill-ui-cli skill missing: ${expected}`)
 }
