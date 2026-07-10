@@ -12,7 +12,7 @@ const fs = require('fs/promises')
 const fsSync = require('fs')
 const os = require('os')
 const path = require('path')
-const { spawnSync } = require('child_process')
+const { spawn, spawnSync } = require('child_process')
 const { createHash } = require('crypto')
 const matter = require('gray-matter')
 
@@ -92,6 +92,7 @@ Commands:
   update <skill-dir> [--note TEXT] [--dry-run]
                                Upload changes for an existing skill as a GitHub pull request
   doctor                       Check repo skills, marketplace manifests, evals, and catalog entries
+  open                         Launch the packaged Skill UI desktop app
   config get                   Show resolved repo/client/default/convention config (token redacted)
   config set <key> <value>     Set CLI overrides: repoOwner, repoName, repoBranch,
                                repoSkillsPath, repoDir, repoConfigPath, customSkillsDir, token
@@ -129,6 +130,7 @@ Configuration/auth resolution:
 
 Examples:
   skill-ui list --json
+  skill-ui open
   skill-ui download skill-ui-cli --target ~/.hermes/skills
   skill-ui download incident-summary --target ~/.hermes/skills
   skill-ui validate ./my-skill
@@ -1257,11 +1259,46 @@ function printTable(rows) {
   }
 }
 
+
+async function openApp() {
+  const appRoot = path.resolve(__dirname, '..')
+  const mainEntry = path.join(appRoot, 'out', 'main', 'index.js')
+  if (!fsSync.existsSync(mainEntry)) {
+    throw new CliError('Skill UI app build is missing. Reinstall the package or run `npm run build` from a checkout.')
+  }
+
+  let electronPath
+  try {
+    electronPath = require('electron')
+  } catch {
+    throw new CliError('Electron runtime is missing. Reinstall Skill UI.')
+  }
+
+  if (typeof electronPath !== 'string' || !electronPath) {
+    throw new CliError('Could not resolve Electron runtime.')
+  }
+
+  await new Promise((resolve, reject) => {
+    const child = spawn(electronPath, [appRoot], {
+      stdio: 'inherit',
+      windowsHide: false
+    })
+
+    child.on('error', (err) => reject(new CliError(`Could not launch Skill UI: ${err.message}`)))
+    child.on('exit', (code, signal) => {
+      if (signal) process.exit(1)
+      process.exit(code ?? 0)
+    })
+  })
+}
+
 async function main(argv) {
   const { args, opts } = parseArgs(argv)
   const command = args[0]
-  if (!command || command === 'help' || opts.help) return console.log(usage())
   if (opts.version) return console.log(VERSION)
+  if (!command || command === 'help' || opts.help) return console.log(usage())
+
+  if (command === 'open') return openApp()
 
   if (command === 'config') {
     const sub = args[1]

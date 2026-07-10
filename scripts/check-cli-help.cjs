@@ -21,7 +21,9 @@ for (const expected of [
   'Install a full skill bundle and write a receipt',
   'Validate SKILL.md plus all support files before upload',
   'Target skills directory; omitted uses configured client/custom/Hermes fallback',
-  'config get                   Show resolved repo/client/default/convention config'
+  'config get                   Show resolved repo/client/default/convention config',
+  'open                         Launch the packaged Skill UI desktop app',
+  'skill-ui open'
 ]) {
   assert(help.includes(expected), `help missing: ${expected}`)
 }

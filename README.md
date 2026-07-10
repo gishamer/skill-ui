@@ -10,6 +10,29 @@ The goal is simple: humans get a friendly Electron UI, and agents get a stable
 `skill-ui` command, without every client needing to know GitHub URLs, branch
 names, skill paths, install directories, token sources, or repository conventions.
 
+## Install and launch
+
+Recommended install:
+
+```bash
+npm install -g skill-ui
+skill-ui --help
+skill-ui open
+```
+
+This single npm package installs the global `skill-ui` CLI and the packaged desktop UI. Use `skill-ui ...` for agent/skill workflows and `skill-ui open` to launch the UI.
+
+If you are testing from a checkout before publishing to npm:
+
+```bash
+npm install
+npm run build
+node bin/skill-ui.js --help
+node bin/skill-ui.js open
+```
+
+Native installers remain optional convenience downloads for users who prefer a platform app launcher.
+
 ## Who it is for
 
 - **Humans** use the Electron app to browse, install, create, import, edit,
@@ -297,10 +320,12 @@ From a development checkout:
 node bin/skill-ui.js --help
 ```
 
-When installed as a package or distributed with the app:
+When installed as a package:
 
 ```bash
+npm install -g skill-ui
 skill-ui --help
+skill-ui open
 ```
 
 ### Commands
@@ -320,6 +345,7 @@ skill-ui doctor                       Check skills, marketplace manifests, evals
 skill-ui config get                   Show resolved repo/client/default/convention config, with token redacted
 skill-ui config set <key> <value>     Set CLI overrides
 skill-ui auth status                  Explain which authentication source will be used
+skill-ui open                         Launch the packaged desktop UI
 ```
 
 Common options:
@@ -348,6 +374,12 @@ Common options:
 Most commands support `--json`; use it for agent-safe structured output.
 
 ### Common examples
+
+Launch the packaged desktop UI:
+
+```bash
+skill-ui open
+```
 
 List available skills and descriptions:
 
@@ -479,8 +511,15 @@ Repository config can add more excluded names.
 
 ## Installing the app
 
-Grab the installer for your platform from the
-[Releases](https://github.com/gishamer/skill-ui/releases) page:
+Recommended developer/agent install:
+
+```bash
+npm install -g skill-ui
+skill-ui open
+```
+
+Optional native installers are available from the
+[Releases](https://github.com/gishamer/skill-ui/releases) page if you prefer a platform app launcher:
 
 - **Windows** — `Skill UI-<version>-setup.exe`
 - **macOS** — `Skill UI-<version>-<arch>.dmg`
@@ -534,7 +573,7 @@ macOS, and Linux and attaches them to a GitHub Release when a `v*` tag is pushed
 - **Shared types (`src/shared/types.ts`)** — IPC contracts and skill data models.
 - **CLI (`bin/skill-ui.js`)** — standalone agent-facing implementation of list,
   read, download, validate, scaffold, remote, mirror, upload, update, doctor,
-  config, and auth commands.
+  config, auth, and desktop launch commands.
 - **Electron token helper (`bin/decrypt-token-electron.cjs`)** — lets the CLI
   decrypt the desktop app's safeStorage token when needed.
 - **Bundled skills (`bundled-skills`)** — skills shipped with the app, exposed as

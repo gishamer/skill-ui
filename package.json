@@ -24,25 +24,33 @@
     "dist:win": "electron-vite build && electron-builder --win",
     "dist:mac": "electron-vite build && electron-builder --mac",
     "dist:linux": "electron-vite build && electron-builder --linux",
-    "postinstall": "electron-builder install-app-deps"
+    "prepack": "npm run typecheck && npm run build",
+    "pack:check": "npm pack --dry-run"
   },
   "dependencies": {
     "@octokit/rest": "^21.0.2",
     "electron-store": "^8.2.0",
     "gray-matter": "^4.0.3",
-    "lucide-react": "^0.460.0"
+    "lucide-react": "^0.460.0",
+    "electron": "^33.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
-    "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "^5.7.2",
     "vite": "^5.4.11"
-  }
+  },
+  "files": [
+    "bin",
+    "out",
+    "bundled-skills",
+    "README.md",
+    "skill-ui.config.example.json"
+  ]
 }
