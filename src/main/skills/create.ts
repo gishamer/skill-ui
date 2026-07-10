@@ -4,7 +4,7 @@ import { tmpdir } from 'os'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import matter from 'gray-matter'
-import type { SkillBundle } from '@shared/types'
+import type { ScaffoldSkillArgs, SkillBundle } from '@shared/types'
 import { getSettings } from '../settings'
 import { parseSkillMd } from './frontmatter'
 
@@ -24,24 +24,27 @@ function yamlString(value: string): string {
   return JSON.stringify(value)
 }
 
-function template(name: string, opts: { owner?: string; lifecycle?: string; version?: string; reviewIntervalDays?: number; channels?: string[] } = {}): string {
+function template(name: string, opts: Partial<ScaffoldSkillArgs> = {}): string {
   const title = name.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
   const owner = opts.owner?.trim() || 'TODO: set owning GitHub team'
-  const lifecycle = opts.lifecycle?.trim() || 'experimental'
+  const lifecycle = opts.lifecycle?.toString().trim() || 'experimental'
   const version = opts.version?.trim() || '0.1.0'
   const reviewIntervalDays = opts.reviewIntervalDays || 180
   const channels = opts.channels && opts.channels.length > 0 ? opts.channels : ['developer']
   const channelLines = channels.map((channel) => `      - ${channel}`).join('\n')
+  const authorLine = opts.author?.trim() ? `author: ${yamlString(opts.author.trim())}\n` : ''
+  const licenseLine = opts.license?.trim() ? `license: ${yamlString(opts.license.trim())}\n` : ''
+  const sourceTypeLine = opts.sourceType?.trim() ? `    source_type: ${yamlString(opts.sourceType.trim())}\n` : ''
   return `---
 name: ${name}
 description: Describe what this skill does and, importantly, when the agent should use it.
-metadata:
+${authorLine}${licenseLine}metadata:
   organization:
     owner: ${yamlString(owner)}
     lifecycle: ${lifecycle}
     version: ${yamlString(version)}
     review_interval_days: ${reviewIntervalDays}
-    channels:
+${sourceTypeLine}    channels:
 ${channelLines}
     trigger_examples:
       - prompt: "Use this skill for <specific realistic task>."
@@ -67,8 +70,18 @@ Provide a concrete example of using this skill.
 `
 }
 
-function withLifecycleMetadata(content: string, opts: { owner?: string; lifecycle?: string; version?: string; reviewIntervalDays?: number; channels?: string[] }): string {
-  if (!opts.owner?.trim() && !opts.lifecycle?.trim() && !opts.version?.trim() && !opts.reviewIntervalDays && !opts.channels?.length) return content
+function withLifecycleMetadata(content: string, opts: Partial<ScaffoldSkillArgs>): string {
+  const hasMetadata = Boolean(
+    opts.owner?.trim() ||
+    opts.lifecycle?.toString().trim() ||
+    opts.version?.trim() ||
+    opts.reviewIntervalDays ||
+    opts.channels?.length ||
+    opts.author?.trim() ||
+    opts.license?.trim() ||
+    opts.sourceType?.trim()
+  )
+  if (!hasMetadata) return content
   const parsed = matter(content)
   const data = (parsed.data && typeof parsed.data === 'object' ? parsed.data : {}) as Record<string, unknown>
   const metadata = (data.metadata && typeof data.metadata === 'object' && !Array.isArray(data.metadata)
@@ -77,12 +90,15 @@ function withLifecycleMetadata(content: string, opts: { owner?: string; lifecycl
   const organization = (metadata.organization && typeof metadata.organization === 'object' && !Array.isArray(metadata.organization)
     ? metadata.organization
     : {}) as Record<string, unknown>
+  if (opts.author?.trim()) data.author = opts.author.trim()
+  if (opts.license?.trim()) data.license = opts.license.trim()
   metadata.organization = {
     ...organization,
     owner: opts.owner?.trim() || organization.owner || 'TODO: set owning GitHub team',
-    lifecycle: opts.lifecycle?.trim() || organization.lifecycle || 'experimental',
+    lifecycle: opts.lifecycle?.toString().trim() || organization.lifecycle || 'experimental',
     version: opts.version?.trim() || organization.version || metadata.version || '0.1.0',
     review_interval_days: opts.reviewIntervalDays || organization.review_interval_days || 180,
+    ...(opts.sourceType?.trim() ? { source_type: opts.sourceType.trim() } : {}),
     channels: opts.channels && opts.channels.length > 0 ? opts.channels : organization.channels || ['developer']
   }
   data.metadata = metadata
@@ -97,17 +113,20 @@ function withLifecycleMetadata(content: string, opts: { owner?: string; lifecycl
  * template when npm / npx is unavailable or offline, so creation always works.
  */
 export async function scaffoldSkill(
-  rawNameOrArgs: string | { name: string; owner?: string; lifecycle?: string }
+  rawNameOrArgs: string | ScaffoldSkillArgs
 ): Promise<SkillBundle> {
   const rawName = typeof rawNameOrArgs === 'string' ? rawNameOrArgs : rawNameOrArgs.name
-  const requested: { owner?: string; lifecycle?: string } = typeof rawNameOrArgs === 'string' ? {} : rawNameOrArgs
+  const requested: Partial<ScaffoldSkillArgs> = typeof rawNameOrArgs === 'string' ? {} : rawNameOrArgs
   const defaults = getSettings().skillDefaults
   const opts = {
     owner: requested.owner?.trim() || defaults.owner || undefined,
-    lifecycle: requested.lifecycle?.trim() || defaults.lifecycle || undefined,
-    version: defaults.version,
-    reviewIntervalDays: defaults.reviewIntervalDays,
-    channels: defaults.channels
+    lifecycle: requested.lifecycle?.toString().trim() || defaults.lifecycle || undefined,
+    version: requested.version?.trim() || defaults.version,
+    reviewIntervalDays: requested.reviewIntervalDays || defaults.reviewIntervalDays,
+    channels: requested.channels && requested.channels.length > 0 ? requested.channels : defaults.channels,
+    author: requested.author?.trim() || undefined,
+    license: requested.license?.trim() || undefined,
+    sourceType: requested.sourceType?.trim() || undefined
   }
   const name = slugify(rawName)
   if (!name) throw new Error('Please provide a valid skill name.')

@@ -275,6 +275,18 @@ export interface RemoteSkillArgs {
 
 export type RemoteSkillBundle = SkillBundle & { remote: RemoteSkillInfo }
 
+export interface ScaffoldSkillArgs {
+  name: string
+  owner?: string
+  lifecycle?: SkillLifecycle | string
+  version?: string
+  reviewIntervalDays?: number
+  channels?: string[]
+  author?: string
+  license?: string
+  sourceType?: string
+}
+
 export interface ClientConfig {
   /** Stable id, e.g. "hermes", "claude", "copilot", "npx-skills" or an org-specific id. */
   id: string
@@ -437,7 +449,7 @@ export interface SkillUiApi {
   }
   skills: {
     install: (args: InstallArgs) => Promise<IpcResult<{ installed: string[] }>>
-    scaffold: (args: string | { name: string; owner?: string; lifecycle?: SkillLifecycle | string }) => Promise<IpcResult<SkillBundle>>
+    scaffold: (args: string | ScaffoldSkillArgs) => Promise<IpcResult<SkillBundle>>
     validate: (args: { name: string; files: SkillFile[] }) => Promise<IpcResult<SkillValidationResult>>
     saveLocal: (args: SaveLocalArgs) => Promise<IpcResult<{ installed: string[] }>>
     upload: (args: UploadArgs) => Promise<IpcResult<UploadResult>>

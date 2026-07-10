@@ -65,19 +65,23 @@ class CliError extends Error {
 function usage() {
   return `Skill UI CLI ${VERSION}
 
-One-stop-shop CLI for agents to list, download, validate, upload, and update skills
-from the Skill UI GitHub skill repository.
+One-stop-shop CLI for agents to list, read, install, scaffold, validate, mirror,
+upload, and update full multi-file skill bundles from the configured Skill UI
+repository.
 
 Usage:
   skill-ui <command> [options]
 
 Commands:
   list                         List bundled and repository skills
-  read <skill>                 Print a bundled/repository skill bundle as JSON
+  read <skill>                 Print a bundled/repository skill bundle as JSON, including support files
   download <skill> [--target DIR]
-                               Download/install a bundled or repository skill into a local skills directory
-  validate <skill-dir>         Validate a local skill folder before upload
-  scaffold <name> [--owner TEAM] [--lifecycle STATE] [--target DIR]
+                               Install a full skill bundle and write a receipt
+  validate <skill-dir>         Validate SKILL.md plus all support files before upload
+  scaffold <name> [--owner TEAM] [--lifecycle STATE] [--skill-version VERSION]
+                               [--review-interval DAYS] [--channels LIST]
+                               [--author NAME] [--license SPDX] [--source-type TYPE]
+                               [--target DIR]
                                Create a governed skill template, printing JSON or writing to --target
   remote <github-url> [--name NAME] [--owner TEAM]
                                Import a GitHub skill as a mirror-ready JSON bundle
@@ -87,8 +91,8 @@ Commands:
                                Upload a new local skill folder as a GitHub pull request
   update <skill-dir> [--note TEXT] [--dry-run]
                                Upload changes for an existing skill as a GitHub pull request
-  doctor                       Check repository health: skills, marketplaces, trigger evals
-  config get                   Show resolved repository/client configuration (token redacted)
+  doctor                       Check repo skills, marketplace manifests, evals, and catalog entries
+  config get                   Show resolved repo/client/default/convention config (token redacted)
   config set <key> <value>     Set CLI overrides: repoOwner, repoName, repoBranch,
                                repoSkillsPath, repoDir, repoConfigPath, customSkillsDir, token
   auth status                  Explain which authentication source will be used
@@ -100,11 +104,17 @@ Common options:
   --branch name                Override branch for one run
   --skills-path path           Override repository path containing skill folders
   --repo-dir DIR               Use a local checkout as the repository source for fast/offline scenarios
-  --config FILE                Use a skill-ui.config.json repository config file for this run
-  --target DIR                 Target skills directory for download/install
+  --config FILE                Use a skill-ui.config.json/.skill-ui.json repository config file for this run
+  --target DIR                 Target skills directory; omitted uses configured client/custom/Hermes fallback
   --note TEXT                  Pull request note/body addition
-  --owner TEAM                 Internal owner for mirrored remote skills
-  --lifecycle STATE            Lifecycle for mirrored remote skills (default: review)
+  --owner TEAM                 Internal owner for mirrored/new skills
+  --lifecycle STATE            Lifecycle for mirrored/new skills (default: review for mirrors)
+  --skill-version VERSION      Initial version for scaffolded skills
+  --review-interval DAYS       Review interval for scaffolded skills
+  --channels LIST              Comma-separated channels for scaffolded skills
+  --author NAME                Author for scaffolded skills
+  --license SPDX               License for scaffolded skills
+  --source-type TYPE           metadata.organization.source_type for scaffolded skills
   --name NAME                  Destination name for mirrored remote skills
   --dry-run                    Validate and show intended action without writing to GitHub
   -h, --help                   Show help
@@ -122,7 +132,8 @@ Examples:
   skill-ui download skill-ui-cli --target ~/.hermes/skills
   skill-ui download incident-summary --target ~/.hermes/skills
   skill-ui validate ./my-skill
-  skill-ui scaffold my-skill --owner @your-org/your-team --lifecycle experimental --target ./skills --json
+  skill-ui config get --config /path/to/skill-ui.config.json --json
+  skill-ui scaffold my-skill --owner @your-org/your-team --lifecycle experimental --skill-version 0.1.0 --review-interval 180 --channels developer --author "Skill Team" --license MIT --source-type internal --target ./skills --json
   skill-ui remote https://github.com/anthropics/skills/tree/main/skills/pdf --name anthropic-pdf --json
   skill-ui doctor --repo your-org/skills --skills-path skills --repo-dir /path/to/skills-checkout --json
   skill-ui mirror https://github.com/anthropics/skills/tree/main/skills/pdf --name anthropic-pdf --owner @your-org/your-team --dry-run --json
@@ -149,6 +160,12 @@ function parseArgs(argv) {
     else if (token === '--note') opts.note = requireValue(argv, ++i, '--note')
     else if (token === '--owner') opts.owner = requireValue(argv, ++i, '--owner')
     else if (token === '--lifecycle') opts.lifecycle = requireValue(argv, ++i, '--lifecycle')
+    else if (token === '--skill-version') opts.skillVersion = requireValue(argv, ++i, '--skill-version')
+    else if (token === '--review-interval') opts.reviewInterval = requireValue(argv, ++i, '--review-interval')
+    else if (token === '--channels') opts.channels = requireValue(argv, ++i, '--channels')
+    else if (token === '--author') opts.author = requireValue(argv, ++i, '--author')
+    else if (token === '--license') opts.license = requireValue(argv, ++i, '--license')
+    else if (token === '--source-type') opts.sourceType = requireValue(argv, ++i, '--source-type')
     else if (token === '--name') opts.name = requireValue(argv, ++i, '--name')
     else if (token.startsWith('--repo=')) opts.repo = token.slice('--repo='.length)
     else if (token.startsWith('--branch=')) opts.branch = token.slice('--branch='.length)
@@ -159,6 +176,12 @@ function parseArgs(argv) {
     else if (token.startsWith('--note=')) opts.note = token.slice('--note='.length)
     else if (token.startsWith('--owner=')) opts.owner = token.slice('--owner='.length)
     else if (token.startsWith('--lifecycle=')) opts.lifecycle = token.slice('--lifecycle='.length)
+    else if (token.startsWith('--skill-version=')) opts.skillVersion = token.slice('--skill-version='.length)
+    else if (token.startsWith('--review-interval=')) opts.reviewInterval = token.slice('--review-interval='.length)
+    else if (token.startsWith('--channels=')) opts.channels = token.slice('--channels='.length)
+    else if (token.startsWith('--author=')) opts.author = token.slice('--author='.length)
+    else if (token.startsWith('--license=')) opts.license = token.slice('--license='.length)
+    else if (token.startsWith('--source-type=')) opts.sourceType = token.slice('--source-type='.length)
     else if (token.startsWith('--name=')) opts.name = token.slice('--name='.length)
     else if (token.startsWith('-')) throw new CliError(`Unknown option: ${token}`, 2)
     else args.push(token)
@@ -419,16 +442,19 @@ function scaffoldSkillTemplate(rawName, opts = {}) {
   const reviewIntervalDays = opts.reviewIntervalDays || 180
   const channels = opts.channels && opts.channels.length ? opts.channels : ['developer']
   const channelLines = channels.map((channel) => `      - ${channel}`).join('\n')
+  const authorLine = opts.author ? `author: ${yamlScalar(opts.author)}\n` : ''
+  const licenseLine = opts.license ? `license: ${yamlScalar(opts.license)}\n` : ''
+  const sourceTypeLine = opts.sourceType ? `    source_type: ${yamlScalar(opts.sourceType)}\n` : ''
   const content = `---
 name: ${name}
 description: Describe what this skill does and, importantly, when the agent should use it.
-metadata:
+${authorLine}${licenseLine}metadata:
   organization:
     owner: ${yamlScalar(owner)}
     lifecycle: ${lifecycle}
     version: ${yamlScalar(version)}
     review_interval_days: ${reviewIntervalDays}
-    channels:
+${sourceTypeLine}    channels:
 ${channelLines}
     trigger_examples:
       - prompt: "Use this skill for <specific realistic task>."
@@ -1303,14 +1329,17 @@ async function main(argv) {
 
   if (command === 'scaffold') {
     const name = args[1]
-    if (!name) throw new CliError('Usage: skill-ui scaffold <name> [--owner TEAM] [--lifecycle STATE] [--target DIR]', 2)
+    if (!name) throw new CliError('Usage: skill-ui scaffold <name> [--owner TEAM] [--lifecycle STATE] [--skill-version VERSION] [--target DIR]', 2)
     const defaults = cfg.skillDefaults
     const bundle = scaffoldSkillTemplate(name, {
       owner: opts.owner || defaults.owner,
       lifecycle: opts.lifecycle || defaults.lifecycle,
-      version: defaults.version,
-      reviewIntervalDays: defaults.reviewIntervalDays,
-      channels: defaults.channels
+      version: opts.skillVersion || defaults.version,
+      reviewIntervalDays: opts.reviewInterval ? Number(opts.reviewInterval) : defaults.reviewIntervalDays,
+      channels: opts.channels ? String(opts.channels).split(',').map((item) => item.trim()).filter(Boolean) : defaults.channels,
+      author: opts.author,
+      license: opts.license,
+      sourceType: opts.sourceType
     })
     const validation = validateSkillBundle(bundle.skill.name, bundle.files)
     if (!validation.valid) throw new CliError(`Generated scaffold is invalid: ${validation.errors.join(' ')}`)

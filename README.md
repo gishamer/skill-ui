@@ -318,16 +318,16 @@ skill-ui --help
 
 ```text
 skill-ui list                         List bundled and repository skills
-skill-ui read <skill>                 Print a bundled/repository skill bundle as JSON
+skill-ui read <skill>                 Print a bundled/repository skill bundle as JSON, including support files
 skill-ui download <skill> --target DIR
                                       Download/install a bundled or repository skill
 skill-ui validate <skill-dir>         Validate a local skill folder
-skill-ui scaffold <name>              Create a governed skill template
+skill-ui scaffold <name>              Create a governed skill template with adjustable metadata defaults
 skill-ui remote <github-url>          Print a mirror-ready remote skill bundle as JSON
 skill-ui mirror <github-url>          Open a mirror PR for a remote GitHub skill
 skill-ui upload <skill-dir>           Upload a new skill as a pull request
 skill-ui update <skill-dir>           Upload changes as a pull request
-skill-ui config get                   Show resolved config with tokens redacted
+skill-ui config get                   Show resolved config/defaults with tokens redacted
 skill-ui config set <key> <value>     Set CLI overrides
 skill-ui auth status                  Show which auth source is being used
 skill-ui doctor                       Check repository health (skills, marketplaces, evals)
@@ -374,6 +374,12 @@ Create a governed skill template from the CLI:
 skill-ui scaffold my-skill \
   --owner @your-org/your-team \
   --lifecycle experimental \
+  --skill-version 0.1.0 \
+  --review-interval 180 \
+  --channels developer \
+  --author "Skill Team" \
+  --license MIT \
+  --source-type internal \
   --target ./skills
 ```
 
@@ -383,7 +389,7 @@ Dry-run an upload before creating a pull request:
 skill-ui upload ./my-skill --dry-run --json
 ```
 
-Configure and check an organization skills repository from a local checkout:
+Configure and check an organization skills repository from a local checkout or repo config file:
 
 ```bash
 skill-ui config set repoOwner your-org
@@ -391,6 +397,7 @@ skill-ui config set repoName skills
 skill-ui config set repoBranch main
 skill-ui config set repoSkillsPath skills
 skill-ui config set repoDir /path/to/skills-checkout
+skill-ui config set repoConfigPath /path/to/skills-checkout/skill-ui.config.json
 skill-ui doctor --json
 ```
 
