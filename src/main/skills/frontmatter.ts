@@ -43,8 +43,21 @@ export function parseSkillMd(content: string, fallbackName: string): SkillMeta {
     typeof rawVersion === 'string' || typeof rawVersion === 'number'
       ? String(rawVersion).trim()
       : null
+  const owner = typeof organization.owner === 'string' && organization.owner.trim()
+    ? organization.owner.trim()
+    : null
+  const rawSourceType = organization.source_type ?? metadata.source_type
+  const sourceType = typeof rawSourceType === 'string' && rawSourceType.trim()
+    ? rawSourceType.trim()
+    : null
+  const remote = Boolean(
+    sourceType?.startsWith('mirrored') ||
+    sourceType === 'remote' ||
+    (organization.mirror && typeof organization.mirror === 'object') ||
+    (metadata.mirror && typeof metadata.mirror === 'object')
+  )
 
-  return { name, description, version, hash: sha256(content) }
+  return { name, description, version, owner, sourceType, remote, hash: sha256(content) }
 }
 
 /**

@@ -1,18 +1,34 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { RefreshCw, Download, Package, Settings as SettingsIcon, Pencil } from 'lucide-react'
-import type { RepoSkill, RepoDoctorReport } from '@shared/types'
+import type { LocalSkill, RepoSkill, RepoDoctorReport } from '@shared/types'
 import { api, unwrap } from '../api'
 import { useApp } from '../context'
 import { Loading, Spinner } from '../components/Spinner'
 import Modal from '../components/Modal'
 import TargetPicker from '../components/TargetPicker'
+import {
+  buildInstallMap,
+  filterRepoSkills,
+  isRemoteSkill,
+  ownerOptions,
+  type CatalogFilters,
+  type InstallFilter,
+  type SourceFilter
+} from '../lib/skillFilters'
 
 export default function BrowsePage() {
   const { configured, clients, toast, navigate } = useApp()
   const [skills, setSkills] = useState<RepoSkill[] | null>(null)
+  const [localSkills, setLocalSkills] = useState<LocalSkill[]>([])
   const [health, setHealth] = useState<RepoDoctorReport | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [filters, setFilters] = useState<CatalogFilters>({
+    owner: '',
+    source: 'all',
+    install: 'all',
+    updatableOnly: false
+  })
 
   const [installTarget, setInstallTarget] = useState<RepoSkill | null>(null)
   const [selected, setSelected] = useState<string[]>([])
@@ -28,9 +44,15 @@ export default function BrowsePage() {
       ])
       setSkills(nextSkills)
       setHealth(nextHealth)
+      try {
+        setLocalSkills(await unwrap(configured ? api.local.checkUpdates() : api.local.list()))
+      } catch {
+        setLocalSkills([])
+      }
     } catch (err) {
       setError((err as Error).message)
       setSkills(null)
+      setLocalSkills([])
       setHealth(null)
     } finally {
       setLoading(false)
@@ -41,6 +63,22 @@ export default function BrowsePage() {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configured])
+
+  const installMap = useMemo(
+    () => buildInstallMap(skills ?? [], localSkills),
+    [skills, localSkills]
+  )
+  const visibleSkills = useMemo(
+    () => filterRepoSkills(skills ?? [], installMap, filters),
+    [skills, installMap, filters]
+  )
+  const owners = useMemo(() => ownerOptions(skills ?? []), [skills])
+  const installedCount = Object.values(installMap).filter((item) => item.installed).length
+  const updatableCount = Object.values(installMap).filter((item) => item.updatable).length
+
+  function setFilter<K extends keyof CatalogFilters>(key: K, value: CatalogFilters[K]) {
+    setFilters((current) => ({ ...current, [key]: value }))
+  }
 
   function openInstall(skill: RepoSkill) {
     setSelected(clients.filter((c) => c.exists).map((c) => c.path))
@@ -143,9 +181,54 @@ export default function BrowsePage() {
       )}
 
       {skills && skills.length > 0 && (
+        <div className="filter-bar">
+          <div className="filter-field">
+            <label>Owner</label>
+            <select value={filters.owner} onChange={(event) => setFilter('owner', event.target.value)}>
+              <option value="">All owners</option>
+              {owners.map((owner) => <option key={owner} value={owner}>{owner}</option>)}
+            </select>
+          </div>
+          <div className="filter-field">
+            <label>Source</label>
+            <select value={filters.source} onChange={(event) => setFilter('source', event.target.value as SourceFilter)}>
+              <option value="all">All sources</option>
+              <option value="own">Our skills</option>
+              <option value="remote">Remote mirrors</option>
+            </select>
+          </div>
+          <div className="filter-field">
+            <label>Install state</label>
+            <select value={filters.install} onChange={(event) => setFilter('install', event.target.value as InstallFilter)}>
+              <option value="all">All install states</option>
+              <option value="installed">Installed ({installedCount})</option>
+              <option value="not-installed">Not installed</option>
+            </select>
+          </div>
+          <label className="checkbox-filter">
+            <input
+              type="checkbox"
+              checked={filters.updatableOnly}
+              onChange={(event) => setFilter('updatableOnly', event.target.checked)}
+            />
+            Updatable ({updatableCount})
+          </label>
+          <span className="filter-count">Showing {visibleSkills.length} of {skills.length}</span>
+        </div>
+      )}
+
+      {skills && skills.length > 0 && visibleSkills.length === 0 && (
+        <div className="empty compact-empty">
+          <h3>No skills match these filters</h3>
+          <p>Relax one of the filters to see more skills.</p>
+        </div>
+      )}
+
+      {skills && visibleSkills.length > 0 && (
         <div className="grid">
-          {skills.map((s) => {
+          {visibleSkills.map((s) => {
             const bundled = s.repoPath.startsWith('builtin/')
+            const install = installMap[s.repoPath] ?? { installed: false, updatable: false }
             return (
               <div
                 className="card clickable-card"
@@ -169,6 +252,12 @@ export default function BrowsePage() {
                   ) : (
                     <span className="badge gray">unversioned</span>
                   )}
+                  {s.owner && <span className="badge gray">owner: {s.owner}</span>}
+                  <span className={isRemoteSkill(s) ? 'badge amber' : 'badge green'}>
+                    {isRemoteSkill(s) ? 'remote mirror' : 'our skill'}
+                  </span>
+                  {install.installed ? <span className="badge green">installed</span> : <span className="badge gray">not installed</span>}
+                  {install.updatable && <span className="badge amber">update available</span>}
                   {s.marketplaces?.claude === true && <span className="badge green">Claude marketplace</span>}
                   {s.marketplaces?.claude === false && <span className="badge amber">missing Claude</span>}
                   {s.marketplaces?.copilot === true && <span className="badge green">Copilot marketplace</span>}

@@ -422,11 +422,22 @@ function parseSkillMd(content, fallbackName) {
     parsed = { data: {}, content: content || '' }
   }
   const data = parsed.data && typeof parsed.data === 'object' ? parsed.data : {}
-  const organization = data.metadata && typeof data.metadata === 'object' ? data.metadata.organization : undefined
+  const metadata = data.metadata && typeof data.metadata === 'object' ? data.metadata : {}
+  const organization = metadata.organization && typeof metadata.organization === 'object' ? metadata.organization : {}
+  const rawSourceType = organization.source_type ?? metadata.source_type
+  const sourceType = typeof rawSourceType === 'string' && rawSourceType.trim() ? rawSourceType.trim() : null
   return {
     name: typeof data.name === 'string' && data.name.trim() ? data.name.trim() : fallbackName,
     description: typeof data.description === 'string' ? data.description : '',
-    version: typeof data.version === 'string' ? data.version : data.metadata && typeof data.metadata.version === 'string' ? data.metadata.version : organization && typeof organization.version === 'string' ? organization.version : null
+    version: typeof data.version === 'string' ? data.version : typeof metadata.version === 'string' ? metadata.version : typeof organization.version === 'string' ? organization.version : null,
+    owner: typeof organization.owner === 'string' && organization.owner.trim() ? organization.owner.trim() : null,
+    sourceType,
+    remote: Boolean(
+      sourceType?.startsWith('mirrored') ||
+      sourceType === 'remote' ||
+      (organization.mirror && typeof organization.mirror === 'object') ||
+      (metadata.mirror && typeof metadata.mirror === 'object')
+    )
   }
 }
 

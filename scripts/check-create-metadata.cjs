@@ -26,6 +26,10 @@ const scaffold = JSON.parse(skillUi([
   '--json'
 ]))
 
+assert.equal(scaffold.skill.owner, '@acme/agents')
+assert.equal(scaffold.skill.sourceType, 'internal')
+assert.equal(scaffold.skill.remote, false)
+
 const skillMd = scaffold.files.find((file) => file.path === 'SKILL.md')?.content || ''
 assert.match(skillMd, /^author: "Skill Team"$/m)
 assert.match(skillMd, /^license: "Apache-2.0"$/m)
