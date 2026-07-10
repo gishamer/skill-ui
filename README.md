@@ -12,7 +12,7 @@ names, skill paths, install directories, token sources, or repository convention
 
 ## Install and launch
 
-Recommended npm install:
+Recommended install:
 
 ```bash
 npm install -g skill-ui
@@ -20,7 +20,18 @@ skill-ui --help
 skill-ui open
 ```
 
-The npm package installs one global `skill-ui` CLI. Use `skill-ui ...` for agent/skill workflows and `skill-ui open` to launch the packaged desktop UI. Native installers remain optional convenience downloads for users who prefer a platform app launcher.
+This single npm package installs the global `skill-ui` CLI and the packaged desktop UI. Use `skill-ui ...` for agent/skill workflows and `skill-ui open` to launch the UI.
+
+If you are testing from a checkout before publishing to npm:
+
+```bash
+npm install
+npm run build
+node bin/skill-ui.js --help
+node bin/skill-ui.js open
+```
+
+Native installers remain optional convenience downloads for users who prefer a platform app launcher.
 
 ## Who it is for
 
