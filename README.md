@@ -127,6 +127,52 @@ configure Skill UI like this:
 | Branch | `main` |
 | Skills path | leave blank if skills are at the repo root, or use `skills` if the repo contains a `skills/` folder |
 
+You can also commit a `skill-ui.config.json` file to the skill repository and point
+Skill UI at it in Settings or with `skill-ui --config ./skill-ui.config.json`.
+This lets the repository carry its own portable defaults instead of relying on
+machine-local UI settings.
+
+```json
+{
+  "repository": {
+    "owner": "your-org",
+    "name": "skills",
+    "branch": "main",
+    "skillsPath": "skills"
+  },
+  "defaults": {
+    "owner": "@your-org/your-team",
+    "lifecycle": "experimental",
+    "mirrorLifecycle": "review",
+    "version": "0.1.0",
+    "reviewIntervalDays": 180,
+    "channels": ["developer"]
+  },
+  "clients": [
+    { "id": "hermes", "label": "Hermes", "path": "~/.hermes/skills", "enabled": true },
+    { "id": "claude", "label": "Claude", "path": "~/.claude/skills", "enabled": true }
+  ],
+  "conventions": {
+    "claudeMarketplacePath": ".claude-plugin/marketplace.json",
+    "copilotMarketplacePath": ".github/plugin/marketplace.json",
+    "skillsHubCatalogPath": "skills.sh.json",
+    "evalsPath": "evals",
+    "bundleExcludeNames": []
+  }
+}
+```
+
+The configuration candidates are:
+
+- repository coordinates and optional local checkout;
+- default metadata for newly created skills, including owner/team, lifecycle,
+  mirror lifecycle, version, review interval, and channels;
+- installed clients and their skills directories, including which clients are
+  enabled for this repository;
+- repository conventions that vary across skill repos, such as marketplace
+  manifest paths, trigger-eval root path, skills hub catalog path, and additional
+  bundle exclusions.
+
 > The `git@github.com:...` URL is useful when cloning with Git over SSH, but
 > Skill UI talks to GitHub through the API. That means it needs a GitHub token;
 > it does not rely on the current terminal's SSH key or `gh` account.

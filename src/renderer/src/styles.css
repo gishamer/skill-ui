@@ -862,6 +862,39 @@ textarea.json-field {
   color: var(--text-faint);
 }
 
+.additional-file {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.file-row-button {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.file-row-button:hover,
+.file-row-button.active {
+  border-color: var(--accent);
+  background: rgba(109, 140, 255, 0.08);
+}
+
+.additional-file-editor {
+  min-height: 260px;
+}
+
+.additional-file-note {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  background: var(--bg);
+  font-size: 12px;
+}
+
 .divider {
   height: 1px;
   background: var(--border);

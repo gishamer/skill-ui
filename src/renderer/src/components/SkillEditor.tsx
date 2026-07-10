@@ -16,6 +16,7 @@ import {
   type FrontmatterValue,
   type JsonErrorMap
 } from '../lib/skillFrontmatter'
+import { updateSkillFileContent } from '../lib/skillFiles'
 
 interface SkillEditorProps {
   bundle: SkillBundle
@@ -25,6 +26,8 @@ interface SkillEditorProps {
 
 export default function SkillEditor({ bundle, nameEditable }: SkillEditorProps) {
   const { clients, toast } = useApp()
+  const [files, setFiles] = useState<SkillFile[]>(bundle.files)
+  const [expandedFilePath, setExpandedFilePath] = useState<string | null>(null)
   const initialSkillMd = bundle.files.find((f) => f.path === 'SKILL.md')?.content ?? ''
   const initialParts = useMemo(() => parseSkillMd(initialSkillMd, bundle), [bundle, initialSkillMd])
 
@@ -34,6 +37,8 @@ export default function SkillEditor({ bundle, nameEditable }: SkillEditorProps) 
   useEffect(() => {
     setFrontmatter(initialParts.frontmatter)
     setSkillBody(initialParts.body)
+    setFiles(bundle.files)
+    setExpandedFilePath(null)
     setValidationErrors([])
     setJsonErrors({})
   }, [initialParts])
@@ -49,8 +54,8 @@ export default function SkillEditor({ bundle, nameEditable }: SkillEditorProps) 
   const [busy, setBusy] = useState(false)
 
   const otherFiles = useMemo(
-    () => bundle.files.filter((f) => f.path !== 'SKILL.md'),
-    [bundle.files]
+    () => files.filter((f) => f.path !== 'SKILL.md'),
+    [files]
   )
   const rawName = String(frontmatter.name ?? '')
   const effectiveName = nameEditable ? slugify(rawName) : rawName
@@ -67,6 +72,11 @@ export default function SkillEditor({ bundle, nameEditable }: SkillEditorProps) 
   function setSkillBodyContent(value: string) {
     setValidationErrors([])
     setSkillBody(value)
+  }
+
+  function setAdditionalFileContent(path: string, content: string) {
+    setValidationErrors([])
+    setFiles((current) => updateSkillFileContent(current, path, content))
   }
 
   function setJsonError(id: string, message: string | null) {
@@ -191,15 +201,40 @@ export default function SkillEditor({ bundle, nameEditable }: SkillEditorProps) 
         <div className="field">
           <label>Additional files ({otherFiles.length})</label>
           <div className="list">
-            {otherFiles.map((f) => (
-              <div className="list-row" key={f.path}>
-                <FileCode size={16} color="var(--text-faint)" />
-                <div className="grow">
-                  <div className="mono">{f.path}</div>
+            {otherFiles.map((file) => {
+              const expanded = expandedFilePath === file.path
+              return (
+                <div className="additional-file" key={file.path}>
+                  <button
+                    type="button"
+                    className={`list-row file-row-button${expanded ? ' active' : ''}`}
+                    onClick={() => setExpandedFilePath(expanded ? null : file.path)}
+                    aria-expanded={expanded}
+                  >
+                    <FileCode size={16} color="var(--text-faint)" />
+                    <div className="grow">
+                      <div className="mono">{file.path}</div>
+                    </div>
+                    <span className="badge gray">{file.encoding === 'base64' ? 'binary' : 'text'}</span>
+                  </button>
+                  {expanded && (
+                    file.encoding === 'utf8' ? (
+                      <textarea
+                        className="code additional-file-editor"
+                        value={file.content}
+                        spellCheck={false}
+                        aria-label={`Edit ${file.path}`}
+                        onChange={(event) => setAdditionalFileContent(file.path, event.target.value)}
+                      />
+                    ) : (
+                      <div className="additional-file-note">
+                        Binary files are preserved on install and upload but cannot be viewed as text.
+                      </div>
+                    )
+                  )}
                 </div>
-                <span className="badge gray">{f.encoding === 'base64' ? 'binary' : 'text'}</span>
-              </div>
-            ))}
+              )
+            })}
           </div>
           <span className="hint">These files are preserved on install and upload.</span>
         </div>

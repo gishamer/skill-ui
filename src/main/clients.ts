@@ -1,7 +1,7 @@
 import { homedir } from 'os'
 import { join } from 'path'
 import { existsSync } from 'fs'
-import type { ClientTarget } from '@shared/types'
+import type { ClientConfig, ClientTarget } from '@shared/types'
 import { getSettings } from './settings'
 
 /**
@@ -39,14 +39,29 @@ const CLIENT_DEFS: ClientDef[] = [
   }
 ]
 
-/** Return all known client targets plus the configured custom directory. */
+function configuredClientTargets(configuredClients: ClientConfig[]): ClientTarget[] {
+  return configuredClients
+    .filter((client) => client.enabled !== false)
+    .map((client) => ({
+      id: client.id,
+      label: client.label,
+      path: client.path,
+      exists: existsSync(client.path),
+      custom: client.custom
+    }))
+}
+
+/** Return all known client targets plus configured repository/client targets. */
 export function detectClients(): ClientTarget[] {
+  const settings = getSettings()
+  if (settings.configuredClients.length > 0) return configuredClientTargets(settings.configuredClients)
+
   const targets: ClientTarget[] = CLIENT_DEFS.map((c) => {
     const path = c.dir()
     return { id: c.id, label: c.label, path, exists: existsSync(path) }
   })
 
-  const { customSkillsDir } = getSettings()
+  const { customSkillsDir } = settings
   if (customSkillsDir && customSkillsDir.trim()) {
     targets.push({
       id: 'custom',

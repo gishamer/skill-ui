@@ -1,0 +1,45 @@
+{
+  "$schema": "https://example.com/skill-ui.config.schema.json",
+  "repository": {
+    "owner": "your-org",
+    "name": "skills",
+    "branch": "main",
+    "skillsPath": "skills",
+    "localCheckout": ""
+  },
+  "defaults": {
+    "owner": "@your-org/your-team",
+    "lifecycle": "experimental",
+    "mirrorLifecycle": "review",
+    "version": "0.1.0",
+    "reviewIntervalDays": 180,
+    "channels": ["developer"]
+  },
+  "clients": [
+    {
+      "id": "hermes",
+      "label": "Hermes",
+      "path": "~/.hermes/skills",
+      "enabled": true
+    },
+    {
+      "id": "claude",
+      "label": "Claude",
+      "path": "~/.claude/skills",
+      "enabled": true
+    },
+    {
+      "id": "copilot",
+      "label": "Copilot / VS Code",
+      "path": "~/.copilot/skills",
+      "enabled": false
+    }
+  ],
+  "conventions": {
+    "claudeMarketplacePath": ".claude-plugin/marketplace.json",
+    "copilotMarketplacePath": ".github/plugin/marketplace.json",
+    "skillsHubCatalogPath": "skills.sh.json",
+    "evalsPath": "evals",
+    "bundleExcludeNames": []
+  }
+}

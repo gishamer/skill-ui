@@ -1,6 +1,7 @@
 import Store from 'electron-store'
 import { safeStorage } from 'electron'
 import type { AppSettings } from '@shared/types'
+import { applyRepoConfig, defaultRepoConventions, defaultSkillDefaults, loadRepoConfig } from './repoConfig'
 
 interface StoreShape {
   repoOwner: string
@@ -8,6 +9,7 @@ interface StoreShape {
   repoBranch: string
   repoSkillsPath: string
   repoDir: string
+  repoConfigPath: string
   customSkillsDir: string
   /** Encrypted (or plain, as fallback) GitHub token. */
   tokenEnc: string
@@ -23,6 +25,7 @@ const store = new Store<StoreShape>({
     repoBranch: 'main',
     repoSkillsPath: '',
     repoDir: '',
+    repoConfigPath: '',
     customSkillsDir: '',
     tokenEnc: '',
     tokenEncrypted: false
@@ -31,15 +34,20 @@ const store = new Store<StoreShape>({
 
 /** Public settings, never exposing the raw token. */
 export function getSettings(): AppSettings {
-  return {
+  const base: AppSettings = {
     repoOwner: store.get('repoOwner'),
     repoName: store.get('repoName'),
     repoBranch: store.get('repoBranch'),
     repoSkillsPath: store.get('repoSkillsPath'),
     repoDir: store.get('repoDir'),
+    repoConfigPath: store.get('repoConfigPath'),
     customSkillsDir: store.get('customSkillsDir'),
-    hasToken: !!store.get('tokenEnc')
+    hasToken: !!store.get('tokenEnc'),
+    skillDefaults: defaultSkillDefaults(),
+    configuredClients: [],
+    repoConventions: defaultRepoConventions()
   }
+  return applyRepoConfig(base, loadRepoConfig(base.repoDir, base.repoConfigPath))
 }
 
 /** Persist a settings patch. A provided `token` is stored encrypted at rest. */
@@ -50,6 +58,7 @@ export function setSettings(patch: Partial<AppSettings> & { token?: string }): A
     'repoBranch',
     'repoSkillsPath',
     'repoDir',
+    'repoConfigPath',
     'customSkillsDir'
   ]
   for (const key of assignable) {
