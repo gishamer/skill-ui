@@ -1,59 +1,76 @@
 # Skill UI
 
-Skill UI is a desktop app and agent-facing CLI for managing shared `SKILL.md`
-agent skills across an organisation. It is designed to be the one-stop-shop for
-finding, installing, creating, updating, and publishing skills without every
-agent or user having to know GitHub repository URLs, branch names, paths, or
-token details.
+Skill UI is a desktop app and agent-facing CLI for discovering, installing,
+creating, editing, validating, mirroring, updating, and publishing Agent Skills.
+It is built for shared skill repositories where each skill is a folder with a
+root `SKILL.md` plus optional support files such as `references/`, `scripts/`,
+`templates/`, `assets/`, and changelogs.
 
-It supports both humans and agents:
+The goal is simple: humans get a friendly Electron UI, and agents get a stable
+`skill-ui` command, without every client needing to know GitHub URLs, branch
+names, skill paths, install directories, token sources, or repository conventions.
 
-- **Humans** use the Electron app to browse, install, create, edit, validate,
-  and publish skills with a friendly UI.
-- **Agents** use the `skill-ui` CLI to perform the same workflows from Hermes,
-  Claude Code, Claude Desktop, or other clients.
+## Who it is for
 
-Skill UI manages skills for clients that load folders containing a root
-`SKILL.md` file:
+- **Humans** use the Electron app to browse, install, create, import, edit,
+  validate, and publish skills.
+- **Agents** use the CLI to list available skills, read descriptions, inspect
+  full bundles, install task-relevant skills, and open PRs for skill changes.
+- **Teams** use a shared GitHub repository plus optional `skill-ui.config.json`
+  defaults to govern skill metadata, marketplace exposure, eval locations, and
+  install targets.
 
-| Client | Default skills directory |
+Skill UI currently targets local folder-based skill clients:
+
+| Client | Default or typical skills directory |
 | --- | --- |
 | Claude Desktop / Claude Code | `~/.claude/skills` |
 | Hermes | `~/.hermes/skills` |
-| Custom client | any directory you choose |
+| Copilot / VS Code-style clients | `~/.copilot/skills` |
+| Custom / configured clients | any directory in settings or repo config |
 
-## What it does
+## Current capabilities
 
-- **Browse skills** — see bundled/default skills plus every skill published to
-  the configured GitHub skill repository.
-- **Install skills** — install a skill into one or more local client directories
-  with one click in the app or one CLI command.
-- **Bundled default skills** — ship always-available skills with Skill UI itself.
-  The default `skill-ui-cli` skill teaches agents how to use the CLI and is
-  available even before a repository is connected.
-- **Create a skill** — scaffold a new skill via `npx skills init`, with a built-in
-  template fallback when npm is unavailable.
-- **Import full skill folders** — preserve multi-file skills with supporting
-  folders such as `references/`, `scripts/`, `templates/`, and `assets/`.
-- **Import remote public skills** — fetch a GitHub-hosted skill, convert it into
-  a mirror-ready bundle with organization lifecycle metadata,
-  `upstream.lock.yaml`, and `PATCHES.md`, then review/upload it as a PR.
-- **Validate skills** — check `SKILL.md` frontmatter, skill/folder name matching,
-  safe paths, required content, lifecycle states, channels, and mirrored-public
-  provenance fields before installing or publishing.
-- **Edit skills** — edit installed or repository skills, then reinstall locally or
-  open a pull request. Bundled/default skills are installable but not editable in
-  the repository editor.
-- **Update installed skills** — compare local installations against the repository
-  and update outdated copies.
-- **Upload as pull requests** — publish new or changed skills by opening a GitHub
-  pull request instead of writing directly to the default branch.
-- **Agent CLI workflows** — let agents list, read, download/install, validate,
-  upload, and update skills through a single `skill-ui` command.
+- **Discover skills** — list bundled/default skills plus configured repository
+  skills; descriptions are shown so agents can choose task-relevant skills before
+  installing them.
+- **Read full skill bundles** — inspect `SKILL.md` and every support file in a
+  skill folder, including text and binary files.
+- **Install skills** — copy a full bundle into one or more local client skill
+  directories and write a Skill UI receipt for future status checks.
+- **Bundled default skill** — `skill-ui-cli` ships with the app and teaches agents
+  how to use the CLI, even before a shared repository is configured.
+- **Create skills** — scaffold a skill with governed metadata defaults; the app
+  tries the wider `npx skills init` workflow and falls back to a built-in template
+  when offline or unavailable.
+- **Edit skills** — edit structured frontmatter, the `SKILL.md` body, and text
+  support files while preserving binary support files.
+- **Validate skills** — check folder/name rules, root `SKILL.md`, YAML
+  frontmatter, descriptions, lifecycle/channel fields, safe paths, support files,
+  and mirror provenance before install or upload.
+- **Import local folders** — bring an existing multi-file skill folder into the
+  editor without flattening it to a single Markdown file.
+- **Mirror remote GitHub skills** — fetch a GitHub-hosted skill folder or
+  `SKILL.md`, add mirror provenance, generate `upstream.lock.yaml` and
+  `PATCHES.md`, review it, then upload it as a PR to the configured repository.
+- **Publish through PRs** — upload new skills or updates to existing skills by
+  creating a branch, committing the bundle under the configured skills path, and
+  opening a GitHub pull request.
+- **Update installed skills** — compare installed bundles against repository
+  bundles using receipts and hashes, update clean outdated installs, and avoid
+  overwriting local modifications without review.
+- **Adopt local edits** — when local checkout mode is configured, diff a modified
+  installed skill and copy the edited bundle back into the repository checkout for
+  review and upload.
+- **Check repository health** — verify skills against Claude/Copilot marketplace
+  manifests, Skills Hub catalog groupings, trigger eval locations, and source
+  mismatches.
+- **Use local checkout mode** — browse, read, install, doctor, and adopt changes
+  from a local checkout for fast/offline work while still using GitHub for PRs.
 
 ## Skill sources
 
-Skill UI can show skills from multiple sources in one catalog.
+Skill UI merges multiple sources into one catalog.
 
 ### Bundled/default skills
 
@@ -63,21 +80,20 @@ Bundled skills live in this repository under:
 bundled-skills/<skill-name>/SKILL.md
 ```
 
-They are shipped with Skill UI and are available even if no GitHub skill
-repository is configured or reachable. In the app and CLI they use a synthetic
-repository path:
+They are included with the app and use a synthetic repository path:
 
 ```text
 builtin/<skill-name>
 ```
 
-The first bundled skill is:
+The bundled skill currently shipped by this repo is:
 
 ```text
 builtin/skill-ui-cli
 ```
 
-Install it into an agent client to teach that client how to use the Skill UI CLI:
+Install it into an agent client to teach that client how to discover and manage
+skills through Skill UI:
 
 ```bash
 skill-ui download skill-ui-cli --target ~/.hermes/skills
@@ -86,29 +102,28 @@ skill-ui download skill-ui-cli --target ~/.claude/skills
 
 ### Shared repository skills
 
-A shared skill repository is a GitHub repository where every skill lives in its
-own folder and each folder contains a root `SKILL.md` file.
+A shared skill repository is a GitHub repository where each skill is a folder
+containing a root `SKILL.md`.
 
-Example layout when skills live at the repository root:
+Skills can live at the repository root:
 
 ```text
 skill-repo/
 ├── pdf-extractor/
-│   └── SKILL.md
-├── incident-summary/
-│   └── SKILL.md
-└── jira-helper/
+│   ├── SKILL.md
+│   └── references/
+└── incident-summary/
     └── SKILL.md
 ```
 
-Example layout when skills live below a `skills/` folder:
+Or below a configured skills path:
 
 ```text
 skill-repo/
 └── skills/
     ├── pdf-extractor/
     │   └── SKILL.md
-    └── jira-helper/
+    └── incident-summary/
         └── SKILL.md
 ```
 
@@ -125,12 +140,23 @@ configure Skill UI like this:
 | Owner | `your-org` |
 | Repository | `your-skill-repo` |
 | Branch | `main` |
-| Skills path | leave blank if skills are at the repo root, or use `skills` if the repo contains a `skills/` folder |
+| Skills path | leave blank for repo-root skills, or use `skills` for `skills/<name>/SKILL.md` |
 
-You can also commit a `skill-ui.config.json` file to the skill repository and point
-Skill UI at it in Settings or with `skill-ui --config ./skill-ui.config.json`.
-This lets the repository carry its own portable defaults instead of relying on
-machine-local UI settings.
+> The SSH URL is useful for cloning, but Skill UI talks to GitHub through the API.
+> Push/upload actions need a GitHub token with repository contents and pull-request
+> permissions; they do not use your terminal SSH key.
+
+> New repositories must have a first commit and the configured branch must exist
+> before Skill UI can list or upload skills.
+
+## Repository configuration
+
+A skill repository can carry portable defaults in `skill-ui.config.json` or
+`.skill-ui.json`. Skill UI can read that file from a configured local checkout,
+from an explicit config path, or from the `SKILL_UI_REPO_CONFIG` environment
+variable.
+
+Example:
 
 ```json
 {
@@ -138,7 +164,8 @@ machine-local UI settings.
     "owner": "your-org",
     "name": "skills",
     "branch": "main",
-    "skillsPath": "skills"
+    "skillsPath": "skills",
+    "localCheckout": "/path/to/skills-checkout"
   },
   "defaults": {
     "owner": "@your-org/your-team",
@@ -150,7 +177,8 @@ machine-local UI settings.
   },
   "clients": [
     { "id": "hermes", "label": "Hermes", "path": "~/.hermes/skills", "enabled": true },
-    { "id": "claude", "label": "Claude", "path": "~/.claude/skills", "enabled": true }
+    { "id": "claude", "label": "Claude", "path": "~/.claude/skills", "enabled": true },
+    { "id": "copilot", "label": "Copilot / VS Code", "path": "~/.copilot/skills", "enabled": true }
   ],
   "conventions": {
     "claudeMarketplacePath": ".claude-plugin/marketplace.json",
@@ -162,213 +190,185 @@ machine-local UI settings.
 }
 ```
 
-The configuration candidates are:
+Configurable repository conventions let different skill repos use different
+marketplace manifest paths, Skills Hub catalog paths, trigger-eval roots, and
+bundle exclusion names without changing the app.
 
-- repository coordinates and optional local checkout;
-- default metadata for newly created skills, including owner/team, lifecycle,
-  mirror lifecycle, version, review interval, and channels;
-- installed clients and their skills directories, including which clients are
-  enabled for this repository;
-- repository conventions that vary across skill repos, such as marketplace
-  manifest paths, trigger-eval root path, skills hub catalog path, and additional
-  bundle exclusions.
-
-> The `git@github.com:...` URL is useful when cloning with Git over SSH, but
-> Skill UI talks to GitHub through the API. That means it needs a GitHub token;
-> it does not rely on the current terminal's SSH key or `gh` account.
-
-> New repositories must have a first commit before Skill UI can upload a skill.
-> If you created an empty repository on GitHub, initialize it first by adding a
-> README, creating the first commit on GitHub, or pushing an initial commit from
-> your local machine. The branch you enter in Skill UI, usually `main`, must exist.
-
-### Remote public skill mirrors
-
-Use **Create → Import remote skill mirror** to bring a GitHub-hosted skill into
-an internal review flow. Provide a GitHub `tree` or `blob` URL, for example:
-
-```text
-https://github.com/anthropics/skills/tree/main/skills/pdf
-```
-
-Skill UI fetches the remote folder, rewrites the mirrored skill name when you
-provide a destination name such as `anthropic-pdf`, and adds the governance files
-expected by the organization lifecycle/distribution model:
-
-- `metadata.organization.owner`, `lifecycle`, `source_type: mirrored-public`, and
-  `mirror` provenance in `SKILL.md`;
-- `upstream.lock.yaml` with source, path, ref, commit, tree hash, mirror date,
-  and local revision;
-- `PATCHES.md` for documenting internal changes on top of upstream.
-
-The imported bundle opens in the normal editor so you can inspect license terms,
-review scripts/references, install locally for testing, or upload it as a PR to
-the configured internal skills repository. Publication remains Git/PR based;
-Agent Registry or runtime publication should consume the reviewed repository
-copy downstream.
-
-## GitHub token setup
+## Authentication and token handling
 
 Skill UI uses a GitHub token to:
 
 - read repository files and list available skills;
-- create branches and commits when you upload or edit a skill;
-- open pull requests for review.
+- create blobs, trees, commits, and branches;
+- open pull requests for new or updated skills.
 
-Recommended: create a **fine-grained personal access token**:
+Recommended token shape:
 
-1. Open GitHub: <https://github.com/settings/personal-access-tokens/new>
-2. Give it a clear name, for example `Skill UI`.
-3. Set an expiration date.
-4. Under **Repository access**, choose **Only select repositories** and select your
-   skill repository.
-5. Under **Repository permissions**, grant:
-   - **Contents**: `Read and write`
-   - **Pull requests**: `Read and write`
-   - **Metadata**: `Read-only` (GitHub enables this automatically)
-6. Click **Generate token** and copy the token immediately. GitHub will only show
-   it once.
+1. Create a fine-grained personal access token at
+   <https://github.com/settings/personal-access-tokens/new>.
+2. Limit it to the skill repository.
+3. Grant **Contents: Read and write**, **Pull requests: Read and write**, and
+   GitHub's default **Metadata: Read-only** permission.
 
-A classic token also works if needed: create one at
-<https://github.com/settings/tokens/new> with the `repo` scope for private
-repositories or `public_repo` for public repositories. Prefer a fine-grained
-token for least-privilege access.
+The desktop app stores the token locally using Electron `safeStorage` when
+available. The CLI resolves auth in this order:
 
-The desktop app stores the token encrypted on the local machine using Electron
-safeStorage / OS keychain support. The CLI can reuse that encrypted desktop token
-so agents get the same repository access as the app, even when the terminal's
-current `gh` account cannot access the skill repository.
+1. CLI config token from `~/.skill-ui/config.json`.
+2. `SKILL_UI_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN`.
+3. Skill UI desktop settings token, including encrypted Electron safeStorage
+   tokens.
+4. `gh auth token`.
 
-## Desktop app workflow
+Check what will be used:
 
-### Configure Skill UI
+```bash
+skill-ui auth status
+skill-ui config get --json
+```
+
+Token values are redacted from normal config output.
+
+## Desktop app workflows
+
+### Configure the repository
 
 Open **Settings** and fill in:
 
-1. **Skill Repository**
-   - **Owner**: GitHub user or organisation, for example `your-org`
-   - **Repository**: repository name, for example `your-skill-repo`
-   - **Branch**: usually `main`
-   - **Skills path**: folder inside the repo that contains skill folders; leave it
-     blank if skill folders are directly at the repository root
-2. **GitHub Access Token**
-   - paste the token you generated above
-   - the token is stored encrypted on this machine
-3. **Custom Skills Directory** *(optional)*
-   - add another local install target if you want Skill UI to install skills
-     somewhere other than Claude Desktop or Hermes
+1. repository owner, name, branch, and skills path;
+2. optional local checkout path for fast/offline reads;
+3. optional repository config JSON path;
+4. optional GitHub token;
+5. optional custom skills directory.
 
-Click **Save settings**, then **Test connection**. If the connection succeeds,
-the Repository page can list both bundled skills and repository skills.
+Click **Save settings**, then **Test connection**. Local checkout mode reports a
+`local:<path>` connection; API mode reports the authenticated GitHub login.
 
-### Install a skill
+### Browse and install
 
 1. Go to **Repository**.
-2. Choose a bundled or repository skill.
-3. Click **Install**.
-4. Pick one or more client directories.
-5. Restart or reload the target client if it only discovers skills on startup.
+2. Review bundled and repository skills, including version, description,
+   marketplace status, Skills Hub group, trigger eval status, and Hermes install
+   identifier where available.
+3. Click a card to inspect/edit a copy, or click **Install**.
+4. Pick one or more client target directories.
+5. Reload or restart the target client if it only scans skills on startup.
 
-### Create and publish a skill
-
-1. Go to **Create**.
-2. Scaffold a small skill, or choose **Import folder** if you already have a full
-   skill folder with support files.
-3. Choose **Install locally** to test it in Claude Desktop, Hermes, or a custom
-   target.
-4. Choose **Upload as PR** when you want to publish it to the shared repository.
-5. Review and merge the pull request on GitHub.
-6. Go back to **Repository** and install the published skill from there.
-
-### Mirror a remote skill
+### Create or import a skill
 
 1. Go to **Create**.
-2. Paste a GitHub skill folder/blob URL in **Import remote skill mirror**.
-3. Set the internal owner, lifecycle state, and optional mirror name.
-4. Click **Import remote**.
-5. Review the generated `SKILL.md`, `upstream.lock.yaml`, `PATCHES.md`, and any
-   scripts/licenses from upstream.
-6. Choose **Upload to repository** to open the reviewed mirror PR.
+2. Scaffold a new skill with owner/lifecycle/version/channel defaults, or import
+   an existing folder that contains `SKILL.md`.
+3. Edit frontmatter and Markdown body. Support files are preserved; text support
+   files can be edited inline and binary files are retained.
+4. Install locally for testing or upload to open a repository PR.
 
-### Edit or update skills
+### Mirror a remote GitHub skill
 
-- Repository and installed skills can be opened in **Edit**, changed, validated,
-  reinstalled, or uploaded as a pull request.
-- Bundled skills are intended to ship with Skill UI. They can be installed, but
-  the app hides the **Edit** action for them.
-- The **Installed** page can check whether local skills are outdated and update
-  them from the repository.
+1. Go to **Create → Import remote skill mirror**.
+2. Paste a GitHub repo, tree, or blob URL.
+3. Optionally set the destination skill name, owner, and lifecycle.
+4. Review the generated `SKILL.md`, `upstream.lock.yaml`, `PATCHES.md`, and any
+   upstream support files.
+5. Upload the reviewed mirror to the configured skill repository as a PR.
+
+Remote mirror import is not an upstream patch flow. It creates or updates a
+reviewable copy in your configured skill repository.
+
+### Edit, update, and adopt installed skills
+
+- **Edit** opens repository skills or installed skills in the editor.
+- **Install locally** writes the edited bundle to selected client directories.
+- **Upload to repository** opens a PR with the edited bundle.
+- **Installed** checks each local skill against the current repository bundle.
+- Clean outdated installs can be updated directly.
+- Locally modified or diverged installs show diff/adopt actions instead of being
+  overwritten automatically.
+- **Adopt** copies local edits back into the configured local repository checkout;
+  review and upload those changes afterward.
+
+Bundled skills can be installed and inspected, but the repository browser hides
+the direct edit action for them because bundled skills ship with the app.
 
 ## CLI workflow
 
-The package exposes a `skill-ui` binary. From a development checkout you can run
-it directly as:
+From a development checkout:
 
 ```bash
 node bin/skill-ui.js --help
 ```
 
-When installed as a package or distributed with the app, use:
+When installed as a package or distributed with the app:
 
 ```bash
 skill-ui --help
 ```
 
-### CLI commands
+### Commands
 
 ```text
 skill-ui list                         List bundled and repository skills
 skill-ui read <skill>                 Print a bundled/repository skill bundle as JSON, including support files
 skill-ui download <skill> --target DIR
-                                      Download/install a bundled or repository skill
-skill-ui validate <skill-dir>         Validate a local skill folder
-skill-ui scaffold <name>              Create a governed skill template with adjustable metadata defaults
+                                      Install a full skill bundle and write a receipt
+skill-ui validate <skill-dir>         Validate SKILL.md plus all support files before upload
+skill-ui scaffold <name>              Create a governed skill template with metadata defaults
 skill-ui remote <github-url>          Print a mirror-ready remote skill bundle as JSON
 skill-ui mirror <github-url>          Open a mirror PR for a remote GitHub skill
 skill-ui upload <skill-dir>           Upload a new skill as a pull request
-skill-ui update <skill-dir>           Upload changes as a pull request
-skill-ui config get                   Show resolved config/defaults with tokens redacted
+skill-ui update <skill-dir>           Upload changes for an existing skill as a pull request
+skill-ui doctor                       Check skills, marketplace manifests, evals, and catalog entries
+skill-ui config get                   Show resolved repo/client/default/convention config, with token redacted
 skill-ui config set <key> <value>     Set CLI overrides
-skill-ui auth status                  Show which auth source is being used
-skill-ui doctor                       Check repository health (skills, marketplaces, evals)
+skill-ui auth status                  Explain which authentication source will be used
 ```
 
-Most commands support `--json` for agent-safe structured output.
+Common options:
 
-### Common CLI examples
+```text
+--json                  Emit machine-readable JSON where supported
+--repo owner/name       Override repository for one run
+--branch name           Override branch for one run
+--skills-path path      Override the repository path containing skill folders
+--repo-dir DIR          Use a local checkout as the repository source
+--config FILE           Use a skill-ui.config.json/.skill-ui.json file
+--target DIR            Install target directory
+--note TEXT             Pull request note/body addition
+--owner TEAM            Owner metadata for created/mirrored skills
+--lifecycle STATE       Lifecycle for created/mirrored skills
+--skill-version VERSION Initial version for scaffolded skills
+--review-interval DAYS  Review interval for scaffolded skills
+--channels LIST         Comma-separated channels for scaffolded skills
+--author NAME           Top-level author for scaffolded skills
+--license SPDX          Top-level license for scaffolded skills
+--source-type TYPE      metadata.organization.source_type for scaffolded skills
+--name NAME             Destination name for mirrored remote skills
+--dry-run               Validate and show intended action without writing to GitHub
+```
 
-List all available skills:
+Most commands support `--json`; use it for agent-safe structured output.
+
+### Common examples
+
+List available skills and descriptions:
 
 ```bash
 skill-ui list --json
 ```
 
-Install the default Skill UI CLI skill into Hermes:
-
-```bash
-skill-ui download skill-ui-cli --target ~/.hermes/skills
-```
-
-Install the default Skill UI CLI skill into Claude:
-
-```bash
-skill-ui download skill-ui-cli --target ~/.claude/skills
-```
-
-Read a skill bundle for inspection:
+Read a full bundle before deciding whether to install it:
 
 ```bash
 skill-ui read skill-ui-cli --json
 ```
 
-Validate a local skill folder:
+Install a skill into a client:
 
 ```bash
-skill-ui validate ./my-skill
-skill-ui validate ./my-skill --json
+skill-ui download skill-ui-cli --target ~/.hermes/skills --json
+skill-ui download skill-ui-cli --target ~/.claude/skills --json
 ```
 
-Create a governed skill template from the CLI:
+Scaffold a governed skill folder:
 
 ```bash
 skill-ui scaffold my-skill \
@@ -380,16 +380,17 @@ skill-ui scaffold my-skill \
   --author "Skill Team" \
   --license MIT \
   --source-type internal \
-  --target ./skills
+  --target ./skills \
+  --json
 ```
 
-Dry-run an upload before creating a pull request:
+Validate a local skill folder:
 
 ```bash
-skill-ui upload ./my-skill --dry-run --json
+skill-ui validate ./my-skill --json
 ```
 
-Configure and check an organization skills repository from a local checkout or repo config file:
+Configure a repository from the CLI:
 
 ```bash
 skill-ui config set repoOwner your-org
@@ -401,7 +402,14 @@ skill-ui config set repoConfigPath /path/to/skills-checkout/skill-ui.config.json
 skill-ui doctor --json
 ```
 
-Dry-run a remote public mirror PR:
+Use one-run overrides instead of saving settings:
+
+```bash
+skill-ui list --repo your-org/skills --branch main --skills-path skills --json
+skill-ui doctor --repo your-org/skills --repo-dir /path/to/skills-checkout --json
+```
+
+Dry-run a remote mirror PR:
 
 ```bash
 skill-ui mirror https://github.com/anthropics/skills/tree/main/skills/pdf \
@@ -410,77 +418,69 @@ skill-ui mirror https://github.com/anthropics/skills/tree/main/skills/pdf \
   --dry-run --json
 ```
 
-Upload a new skill as a pull request:
+Upload a new skill as a PR:
 
 ```bash
 skill-ui upload ./my-skill --note "Initial version"
 ```
 
-Upload changes to an existing skill as a pull request:
+Upload changes to an existing repository skill as a PR:
 
 ```bash
 skill-ui update ./my-skill --note "Improve install guidance"
 ```
 
-### CLI authentication order
+## Agent usage pattern
 
-The CLI resolves authentication in this order:
+Agents should use Skill UI as a discovery surface, not only as a downloader:
 
-1. CLI config token from `~/.skill-ui/config.json`.
-2. Environment variables: `SKILL_UI_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN`.
-3. Skill UI desktop settings token, including encrypted Electron safeStorage
-   tokens.
-4. `gh auth token`.
+1. Run `skill-ui list --json`.
+2. Compare each candidate's `description` to the current task.
+3. Run `skill-ui read <name> --json` for likely matches.
+4. Install only relevant skills with `skill-ui download <name> --target <dir>`.
+5. Continue the task using the installed or rendered skill content.
+6. If the user asks to change a downloaded repository skill, edit the local skill
+   folder and run `skill-ui update <skill-dir> --dry-run --json`, then run the
+   real update to open a PR after review.
 
-Check the active source with:
+For arbitrary remote GitHub skills that are not yet in the configured repository,
+use `skill-ui remote` or `skill-ui mirror` first. `skill-ui update` publishes a
+local repository-skill bundle to the configured repository; it does not patch an
+upstream third-party repository in place.
 
-```bash
-skill-ui auth status
-skill-ui config get --json
-```
+## Validation, receipts, and update states
 
-## Skill validation and versioning
+Skill UI validates a bundle before install/upload. A valid bundle needs:
 
-Skill UI validates skills before install/upload. A valid skill must include:
-
-- a root `SKILL.md` file;
+- a safe skill folder name;
+- a root UTF-8 `SKILL.md`;
 - YAML frontmatter starting at the first byte;
-- non-empty `name` and `description` fields;
-- a frontmatter `name` matching the skill folder name;
+- non-empty `name` and `description`;
+- frontmatter `name` matching the folder name;
 - Markdown instructions after the frontmatter;
-- safe relative paths for all files.
+- safe relative file paths and no `.git` or `node_modules` inside the bundle;
+- required mirror files/provenance for `metadata.organization.source_type:
+  mirrored-public`.
 
-Updates compare the `metadata.version` or top-level `version` field in each
-skill's `SKILL.md` frontmatter. It supports top-level `version`,
-`metadata.version`, and nested organization-specific version fields such as `metadata.organization.version`. When
-all version fields are missing, Skill UI falls back to comparing the content hash
-of `SKILL.md`. Bump the version when you publish a change so installed copies are
-offered the update.
+Installs write receipts under Skill UI state so later scans can distinguish:
 
-```yaml
----
-name: pdf-extractor
-description: Extracts text and tables from PDF files. Use when ...
-metadata:
-  version: 1.2.0
----
-```
+- current installs;
+- clean outdated installs;
+- locally modified installs;
+- diverged installs where both repo and local copy changed;
+- unmanaged installs without a receipt;
+- legacy symlink installs;
+- blocked/unsupported targets.
 
-Top-level `version` also works:
-
-```yaml
----
-name: pdf-extractor
-description: Extracts text and tables from PDF files. Use when ...
-version: 1.2.0
----
-```
+Bundle hashes cover distributable files after filtering generated/repository-only
+folders such as `.git`, `.loop`, `node_modules`, `out`, `dist`, `evals`, `docs`,
+`schemas`, `.github`, `.claude-plugin`, `skills.lock.yaml`, and `skills.sh.json`.
+Repository config can add more excluded names.
 
 ## Installing the app
 
 Grab the installer for your platform from the
-[Releases](https://github.com/gishamer/skill-ui/releases) page — a single
-installer that sets up everything needed to run the app:
+[Releases](https://github.com/gishamer/skill-ui/releases) page:
 
 - **Windows** — `Skill UI-<version>-setup.exe`
 - **macOS** — `Skill UI-<version>-<arch>.dmg`
@@ -489,14 +489,19 @@ installer that sets up everything needed to run the app:
 ## Development
 
 ```bash
-npm install      # install dependencies
-npm run dev      # launch the app in development with hot reload
-npm run start    # preview the built app
-npm run build    # build Electron/Vite output
+npm install
+npm run dev
+npm run start
+npm run build
 npm run typecheck
+npm run test:repo-config
+npm run test:additional-files
+npm run test:create-metadata
+npm run test:cli-help
+npm run test:skill-ui-cli-skill
 ```
 
-The CLI can be exercised from the repo with:
+Exercise the CLI from a checkout:
 
 ```bash
 node bin/skill-ui.js --help
@@ -506,36 +511,35 @@ node bin/skill-ui.js list --json
 ## Building installers
 
 ```bash
-npm run dist          # build for the current platform
-npm run dist:win      # Windows (NSIS)
-npm run dist:mac      # macOS (dmg, x64 + arm64)
-npm run dist:linux    # Linux (AppImage + deb)
+npm run dist          # current platform
+npm run dist:win      # Windows NSIS installer
+npm run dist:mac      # macOS dmg
+npm run dist:linux    # Linux AppImage and deb
 ```
 
-Output is written to `release/<version>/`. CI (`.github/workflows/release.yml`)
-builds all three platforms and attaches the installers to a GitHub Release when
-you push a `v*` tag.
+Output is written to `release/<version>/`. CI builds installers for Windows,
+macOS, and Linux and attaches them to a GitHub Release when a `v*` tag is pushed.
 
 ## Architecture
 
-- **Electron + React + TypeScript**, bundled with
-  [electron-vite](https://electron-vite.org) and packaged with
-  [electron-builder](https://www.electron.build).
-- **Main process** (`src/main`) — filesystem and network access: GitHub
-  integration (`@octokit/rest`), bundled/default skill loading, local skill
-  scanning/installation, scaffolding, validation, update diffing, and encrypted
-  settings.
-- **Bundled skills** (`bundled-skills`) — default skills shipped with the app and
-  exposed as `builtin/<skill-name>`.
-- **CLI** (`bin/skill-ui.js`) — agent-facing skill operations using the same app
-  configuration and auth model.
-- **Electron token helper** (`bin/decrypt-token-electron.cjs`) — lets the CLI
-  decrypt the desktop app's safeStorage token when needed.
-- **Preload** (`src/preload`) — typed `contextBridge` API; the renderer has no
+- **Electron + React + TypeScript** — bundled with `electron-vite` and packaged
+  with `electron-builder`.
+- **Main process (`src/main`)** — GitHub API access, settings, token handling,
+  repository config, bundled skills, skill bundle IO, validation, remote mirror
+  import, install receipts, update-state classification, and PR creation.
+- **Renderer (`src/renderer`)** — Repository, Installed, Create, Edit, and
+  Settings pages plus the structured frontmatter editor.
+- **Preload (`src/preload`)** — typed `contextBridge` API; the renderer has no
   direct Node access.
-- **Renderer** (`src/renderer`) — the React UI.
-- **Shared types** (`src/shared/types.ts`) — the IPC contract.
+- **Shared types (`src/shared/types.ts`)** — IPC contracts and skill data models.
+- **CLI (`bin/skill-ui.js`)** — standalone agent-facing implementation of list,
+  read, download, validate, scaffold, remote, mirror, upload, update, doctor,
+  config, and auth commands.
+- **Electron token helper (`bin/decrypt-token-electron.cjs`)** — lets the CLI
+  decrypt the desktop app's safeStorage token when needed.
+- **Bundled skills (`bundled-skills`)** — skills shipped with the app, exposed as
+  `builtin/<skill-name>`.
 
-> Note: in-app AI generation of skills from a prompt is intentionally not
-> included yet; the create flow scaffolds and lets you paste/edit content. The
-> `SkillEditor` is the natural extension point for adding generation later.
+In-app AI generation of skills from a prompt is intentionally not included yet.
+The create flow scaffolds a skill and lets you paste or edit content; the editor
+is the extension point for future generation features.
