@@ -1,7 +1,7 @@
 import { Octokit } from '@octokit/rest'
 import matter from 'gray-matter'
 import type { RemoteSkillArgs, RemoteSkillInfo, SkillBundle, SkillFile } from '@shared/types'
-import { getToken } from './settings'
+import { getSettings, getToken } from './settings'
 import { parseSkillMd } from './skills/frontmatter'
 
 class RemoteSkillError extends Error {}
@@ -242,9 +242,10 @@ export async function importRemoteSkill(args: RemoteSkillArgs): Promise<SkillBun
     mirroredAt
   }
 
+  const defaults = getSettings().skillDefaults
   const normalizedFiles = files.map((file) =>
     file.path === 'SKILL.md' && file.encoding === 'utf8'
-      ? { ...file, content: annotateSkillMd(file.content, remote, args.owner, args.lifecycle) }
+      ? { ...file, content: annotateSkillMd(file.content, remote, args.owner || defaults.owner, args.lifecycle || defaults.mirrorLifecycle) }
       : file
   )
 

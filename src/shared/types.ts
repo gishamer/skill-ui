@@ -275,7 +275,48 @@ export interface RemoteSkillArgs {
 
 export type RemoteSkillBundle = SkillBundle & { remote: RemoteSkillInfo }
 
-/** Persisted application settings. */
+export interface ClientConfig {
+  /** Stable id, e.g. "hermes", "claude", "copilot", "npx-skills" or an org-specific id. */
+  id: string
+  /** Human friendly label shown in the UI. */
+  label: string
+  /** Absolute or home-relative path to this client's skills directory. */
+  path: string
+  /** Whether this configured client target should be shown/used. */
+  enabled: boolean
+  /** True for arbitrary local-folder targets. */
+  custom?: boolean
+}
+
+export interface SkillDefaults {
+  /** Default team/owner metadata for newly created or mirrored skills. */
+  owner: string
+  /** Default lifecycle for newly authored internal skills. */
+  lifecycle: SkillLifecycle | string
+  /** Default lifecycle for mirrored remote skills. */
+  mirrorLifecycle: SkillLifecycle | string
+  /** Initial version written to new skill metadata. */
+  version: string
+  /** Default metadata review interval in days. */
+  reviewIntervalDays: number
+  /** Default publishing/consumer channels. */
+  channels: string[]
+}
+
+export interface RepoConventions {
+  /** Path to the Claude marketplace manifest in the configured repository. */
+  claudeMarketplacePath: string
+  /** Path to the Copilot/VS Code marketplace manifest in the configured repository. */
+  copilotMarketplacePath: string
+  /** Path to the skills.sh catalog file in the configured repository. */
+  skillsHubCatalogPath: string
+  /** Repository path containing trigger eval folders by skill name. */
+  evalsPath: string
+  /** Extra top-level/path-part names excluded from installed bundles. */
+  bundleExcludeNames: string[]
+}
+
+/** Persisted application settings plus resolved repository JSON configuration. */
 export interface AppSettings {
   /** GitHub repo owner that hosts the org skill repository. */
   repoOwner: string
@@ -287,10 +328,18 @@ export interface AppSettings {
   repoSkillsPath: string
   /** Optional local checkout used as the repository source for fast/offline browsing. */
   repoDir: string
+  /** Optional local JSON config file for this skill repository. */
+  repoConfigPath: string
   /** Whether a GitHub token is currently stored (the token itself is never returned). */
   hasToken: boolean
   /** User provided custom skills directory (optional). */
   customSkillsDir: string
+  /** Defaults used for new/mirrored skills. */
+  skillDefaults: SkillDefaults
+  /** Client install targets configured by the repository JSON file. */
+  configuredClients: ClientConfig[]
+  /** Repository layout conventions configured by the repository JSON file. */
+  repoConventions: RepoConventions
 }
 
 /** Result of opening a pull request for an uploaded skill. */

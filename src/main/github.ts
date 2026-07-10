@@ -150,10 +150,11 @@ async function localRepoContext(repoDir: string): Promise<LocalRepoContext> {
   if (!fsSync.existsSync(root) || !fsSync.statSync(root).isDirectory()) {
     throw new GitHubError(`Local repository directory does not exist: ${root}`)
   }
+  const conventions = getSettings().repoConventions
   const [claudeMarketplace, copilotMarketplace, skillsHubCatalog] = await Promise.all([
-    readJsonFileIfExists(path.join(root, '.claude-plugin', 'marketplace.json')),
-    readJsonFileIfExists(path.join(root, '.github', 'plugin', 'marketplace.json')),
-    readJsonFileIfExists(path.join(root, 'skills.sh.json'))
+    readJsonFileIfExists(path.join(root, conventions.claudeMarketplacePath)),
+    readJsonFileIfExists(path.join(root, conventions.copilotMarketplacePath)),
+    readJsonFileIfExists(path.join(root, conventions.skillsHubCatalogPath))
   ])
   return {
     root,
@@ -164,7 +165,7 @@ async function localRepoContext(repoDir: string): Promise<LocalRepoContext> {
 }
 
 function annotateLocalRepoSkill(skill: RepoSkill, ctx: LocalRepoContext, coords: { owner: string; repo: string }): RepoSkill {
-  const evalPath = path.join(ctx.root, 'evals', skill.name, 'triggers.yaml')
+  const evalPath = path.join(ctx.root, getSettings().repoConventions.evalsPath, skill.name, 'triggers.yaml')
   return {
     ...skill,
     marketplaces: {
@@ -193,10 +194,11 @@ async function readJsonBlobFromTree(octokit: Octokit, owner: string, repo: strin
 }
 
 async function remoteRepoContext(octokit: Octokit, owner: string, repo: string, tree: TreeEntry[]): Promise<RepoContext> {
+  const conventions = getSettings().repoConventions
   const [claudeMarketplace, copilotMarketplace, skillsHubCatalog] = await Promise.all([
-    readJsonBlobFromTree(octokit, owner, repo, tree, '.claude-plugin/marketplace.json'),
-    readJsonBlobFromTree(octokit, owner, repo, tree, '.github/plugin/marketplace.json'),
-    readJsonBlobFromTree(octokit, owner, repo, tree, 'skills.sh.json')
+    readJsonBlobFromTree(octokit, owner, repo, tree, conventions.claudeMarketplacePath),
+    readJsonBlobFromTree(octokit, owner, repo, tree, conventions.copilotMarketplacePath),
+    readJsonBlobFromTree(octokit, owner, repo, tree, conventions.skillsHubCatalogPath)
   ])
   return {
     claudePlugins: pluginSources(claudeMarketplace),
@@ -206,7 +208,7 @@ async function remoteRepoContext(octokit: Octokit, owner: string, repo: string, 
 }
 
 function annotateRemoteRepoSkill(skill: RepoSkill, ctx: RepoContext, coords: { owner: string; repo: string }, tree: TreeEntry[]): RepoSkill {
-  const evalPath = `evals/${skill.name}/triggers.yaml`
+  const evalPath = repoPathJoin(getSettings().repoConventions.evalsPath, skill.name, 'triggers.yaml')
   return {
     ...skill,
     marketplaces: {
@@ -346,7 +348,7 @@ export async function doctorRepo(): Promise<RepoDoctorReport> {
     const normalizedExpected = skill.repoPath
     const claudeSource = ctx.claudePlugins.get(skill.name) ?? null
     const copilotSource = ctx.copilotPlugins.get(skill.name) ?? null
-    const evalPath = path.join(ctx.root, 'evals', skill.name, 'triggers.yaml')
+    const evalPath = path.join(ctx.root, getSettings().repoConventions.evalsPath, skill.name, 'triggers.yaml')
     const triggersPath = fsSync.existsSync(evalPath) ? path.relative(ctx.root, evalPath).split(path.sep).join('/') : null
     const skillsHubGroup = ctx.skillsHubGroups.get(skill.name) ?? null
     const issues: string[] = []

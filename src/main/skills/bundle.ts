@@ -2,6 +2,7 @@ import { createHash } from 'crypto'
 import fs from 'fs/promises'
 import path from 'path'
 import type { SkillFile } from '@shared/types'
+import { getSettings } from '../settings'
 
 export const BUNDLE_EXCLUDED_NAMES = new Set([
   '.git',
@@ -36,7 +37,8 @@ function posixRelative(root: string, file: string): string {
 }
 
 function shouldExclude(relativePath: string): boolean {
-  return relativePath.split('/').some((part) => BUNDLE_EXCLUDED_NAMES.has(part))
+  const configuredExcludes = new Set(getSettings().repoConventions.bundleExcludeNames)
+  return relativePath.split('/').some((part) => BUNDLE_EXCLUDED_NAMES.has(part) || configuredExcludes.has(part))
 }
 
 function pathCompare(a: string, b: string): number {

@@ -25,8 +25,26 @@ const DEFAULT_SETTINGS = {
   repoBranch: 'main',
   repoSkillsPath: '',
   repoDir: '',
-  customSkillsDir: ''
+  repoConfigPath: '',
+  customSkillsDir: '',
+  skillDefaults: {
+    owner: '',
+    lifecycle: 'experimental',
+    mirrorLifecycle: 'review',
+    version: '0.1.0',
+    reviewIntervalDays: 180,
+    channels: ['developer'],
+  },
+  configuredClients: [],
+  repoConventions: {
+    claudeMarketplacePath: '.claude-plugin/marketplace.json',
+    copilotMarketplacePath: '.github/plugin/marketplace.json',
+    skillsHubCatalogPath: 'skills.sh.json',
+    evalsPath: 'evals',
+    bundleExcludeNames: []
+  }
 }
+const REPO_CONFIG_FILENAMES = ['skill-ui.config.json', '.skill-ui.json']
 const BUNDLED_PREFIX = 'builtin/'
 const BUNDLED_DIR = 'bundled-skills'
 const IGNORED_SKILL_DIR_ENTRIES = new Set(['.git', 'node_modules', '.DS_Store'])
@@ -72,7 +90,7 @@ Commands:
   doctor                       Check repository health: skills, marketplaces, trigger evals
   config get                   Show resolved repository/client configuration (token redacted)
   config set <key> <value>     Set CLI overrides: repoOwner, repoName, repoBranch,
-                               repoSkillsPath, repoDir, customSkillsDir, token
+                               repoSkillsPath, repoDir, repoConfigPath, customSkillsDir, token
   auth status                  Explain which authentication source will be used
   help                         Show this help
 
@@ -82,6 +100,7 @@ Common options:
   --branch name                Override branch for one run
   --skills-path path           Override repository path containing skill folders
   --repo-dir DIR               Use a local checkout as the repository source for fast/offline scenarios
+  --config FILE                Use a skill-ui.config.json repository config file for this run
   --target DIR                 Target skills directory for download/install
   --note TEXT                  Pull request note/body addition
   --owner TEAM                 Internal owner for mirrored remote skills
@@ -125,6 +144,7 @@ function parseArgs(argv) {
     else if (token === '--branch') opts.branch = requireValue(argv, ++i, '--branch')
     else if (token === '--skills-path') opts.skillsPath = requireValue(argv, ++i, '--skills-path')
     else if (token === '--repo-dir') opts.repoDir = requireValue(argv, ++i, '--repo-dir')
+    else if (token === '--config') opts.config = requireValue(argv, ++i, '--config')
     else if (token === '--target') opts.target = requireValue(argv, ++i, '--target')
     else if (token === '--note') opts.note = requireValue(argv, ++i, '--note')
     else if (token === '--owner') opts.owner = requireValue(argv, ++i, '--owner')
@@ -134,6 +154,7 @@ function parseArgs(argv) {
     else if (token.startsWith('--branch=')) opts.branch = token.slice('--branch='.length)
     else if (token.startsWith('--skills-path=')) opts.skillsPath = token.slice('--skills-path='.length)
     else if (token.startsWith('--repo-dir=')) opts.repoDir = token.slice('--repo-dir='.length)
+    else if (token.startsWith('--config=')) opts.config = token.slice('--config='.length)
     else if (token.startsWith('--target=')) opts.target = token.slice('--target='.length)
     else if (token.startsWith('--note=')) opts.note = token.slice('--note='.length)
     else if (token.startsWith('--owner=')) opts.owner = token.slice('--owner='.length)
@@ -164,23 +185,107 @@ async function loadConfig(opts = {}) {
   const app = await readJsonIfExists(APP_SETTINGS_PATH)
   const cli = await readJsonIfExists(CLI_CONFIG_PATH)
   const repoOverride = opts.repo ? parseRepo(opts.repo) : {}
-  return {
+  const preliminary = {
     ...DEFAULT_SETTINGS,
     ...pickSettings(app),
     ...pickSettings(cli),
     ...repoOverride,
     ...(opts.branch ? { repoBranch: opts.branch } : {}),
     ...(opts.skillsPath !== undefined ? { repoSkillsPath: opts.skillsPath } : {}),
-    ...(opts.repoDir !== undefined ? { repoDir: opts.repoDir } : {})
+    ...(opts.repoDir !== undefined ? { repoDir: opts.repoDir } : {}),
+    ...(opts.config !== undefined ? { repoConfigPath: opts.config } : {})
+  }
+  const repoConfig = await readRepoConfig(preliminary)
+  const configured = applyRepoConfig(preliminary, repoConfig)
+  return {
+    ...configured,
+    ...repoOverride,
+    ...(opts.branch ? { repoBranch: opts.branch } : {}),
+    ...(opts.skillsPath !== undefined ? { repoSkillsPath: opts.skillsPath } : {}),
+    ...(opts.repoDir !== undefined ? { repoDir: opts.repoDir } : {}),
+    ...(opts.config !== undefined ? { repoConfigPath: path.resolve(expandHome(opts.config)) } : {})
   }
 }
 
 function pickSettings(input) {
   const out = {}
-  for (const key of ['repoOwner', 'repoName', 'repoBranch', 'repoSkillsPath', 'repoDir', 'customSkillsDir', 'token', 'tokenEnc', 'tokenEncrypted']) {
+  for (const key of ['repoOwner', 'repoName', 'repoBranch', 'repoSkillsPath', 'repoDir', 'repoConfigPath', 'customSkillsDir', 'token', 'tokenEnc', 'tokenEncrypted']) {
     if (typeof input[key] === 'string' || typeof input[key] === 'boolean') out[key] = input[key]
   }
   return out
+}
+
+function normalizeRepoPath(value) {
+  return String(value || '').replace(/^\.\//, '').replace(/^\/+|\/+$/g, '')
+}
+
+function stringValue(value) {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function stringArray(value) {
+  if (!Array.isArray(value)) return undefined
+  const strings = value.filter((item) => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
+  return strings.length ? strings : undefined
+}
+
+async function readRepoConfig(cfg) {
+  const candidates = []
+  if (process.env.SKILL_UI_REPO_CONFIG) candidates.push(process.env.SKILL_UI_REPO_CONFIG)
+  if (cfg.repoConfigPath) candidates.push(cfg.repoConfigPath)
+  if (cfg.repoDir) {
+    for (const name of REPO_CONFIG_FILENAMES) candidates.push(path.join(expandHome(cfg.repoDir), name))
+  }
+  for (const candidate of candidates) {
+    const resolved = path.resolve(expandHome(candidate))
+    if (!fsSync.existsSync(resolved)) continue
+    const raw = await readJsonIfExists(resolved)
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new CliError(`Repository config ${resolved} must contain a JSON object.`)
+    return { path: resolved, raw }
+  }
+  return null
+}
+
+function applyRepoConfig(base, loaded) {
+  if (!loaded) return base
+  const raw = loaded.raw
+  const repository = raw.repository && typeof raw.repository === 'object' ? raw.repository : {}
+  const defaults = raw.defaults && typeof raw.defaults === 'object' ? raw.defaults : {}
+  const conventions = raw.conventions && typeof raw.conventions === 'object' ? raw.conventions : {}
+  const skillDefaults = {
+    ...base.skillDefaults,
+    ...(stringValue(defaults.owner) ? { owner: stringValue(defaults.owner) } : {}),
+    ...(stringValue(defaults.lifecycle) ? { lifecycle: stringValue(defaults.lifecycle) } : {}),
+    ...(stringValue(defaults.mirrorLifecycle) ? { mirrorLifecycle: stringValue(defaults.mirrorLifecycle) } : {}),
+    ...(stringValue(defaults.version) ? { version: stringValue(defaults.version) } : {}),
+    ...(Number.isInteger(defaults.reviewIntervalDays) && defaults.reviewIntervalDays > 0 ? { reviewIntervalDays: defaults.reviewIntervalDays } : {}),
+    ...(stringArray(defaults.channels) ? { channels: stringArray(defaults.channels) } : {})
+  }
+  const repoConventions = {
+    ...base.repoConventions,
+    ...(stringValue(conventions.claudeMarketplacePath) ? { claudeMarketplacePath: normalizeRepoPath(conventions.claudeMarketplacePath) } : {}),
+    ...(stringValue(conventions.copilotMarketplacePath) ? { copilotMarketplacePath: normalizeRepoPath(conventions.copilotMarketplacePath) } : {}),
+    ...(stringValue(conventions.skillsHubCatalogPath) ? { skillsHubCatalogPath: normalizeRepoPath(conventions.skillsHubCatalogPath) } : {}),
+    ...(stringValue(conventions.evalsPath) ? { evalsPath: normalizeRepoPath(conventions.evalsPath) } : {}),
+    ...(stringArray(conventions.bundleExcludeNames) ? { bundleExcludeNames: stringArray(conventions.bundleExcludeNames) } : {})
+  }
+  const configuredClients = Array.isArray(raw.clients)
+    ? raw.clients
+        .filter((client) => client && typeof client === 'object' && stringValue(client.id) && stringValue(client.label) && stringValue(client.path))
+        .map((client) => ({ id: stringValue(client.id), label: stringValue(client.label), path: expandHome(stringValue(client.path)), enabled: typeof client.enabled === 'boolean' ? client.enabled : true, custom: typeof client.custom === 'boolean' ? client.custom : stringValue(client.id) === 'custom' }))
+    : []
+  return {
+    ...base,
+    repoOwner: stringValue(repository.owner) || base.repoOwner,
+    repoName: stringValue(repository.name) || base.repoName,
+    repoBranch: stringValue(repository.branch) || base.repoBranch,
+    repoSkillsPath: normalizeRepoPath(stringValue(repository.skillsPath) || base.repoSkillsPath),
+    repoDir: expandHome(stringValue(repository.localCheckout) || base.repoDir || ''),
+    repoConfigPath: loaded.path,
+    skillDefaults,
+    repoConventions,
+    configuredClients
+  }
 }
 
 function parseRepo(repo) {
@@ -310,6 +415,10 @@ function scaffoldSkillTemplate(rawName, opts = {}) {
   const title = name.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
   const owner = opts.owner || 'TODO: set owning GitHub team'
   const lifecycle = opts.lifecycle || 'experimental'
+  const version = opts.version || '0.1.0'
+  const reviewIntervalDays = opts.reviewIntervalDays || 180
+  const channels = opts.channels && opts.channels.length ? opts.channels : ['developer']
+  const channelLines = channels.map((channel) => `      - ${channel}`).join('\n')
   const content = `---
 name: ${name}
 description: Describe what this skill does and, importantly, when the agent should use it.
@@ -317,10 +426,10 @@ metadata:
   organization:
     owner: ${yamlScalar(owner)}
     lifecycle: ${lifecycle}
-    version: "0.1.0"
-    review_interval_days: 180
+    version: ${yamlScalar(version)}
+    review_interval_days: ${reviewIntervalDays}
     channels:
-      - developer
+${channelLines}
     trigger_examples:
       - prompt: "Use this skill for <specific realistic task>."
         should_trigger: true
@@ -450,9 +559,9 @@ async function readJsonBlobFromTree(client, cfg, tree, filePath) {
 
 async function remoteRepoContext(client, cfg, tree) {
   const [claudeMarketplace, copilotMarketplace, skillsHubCatalog] = await Promise.all([
-    readJsonBlobFromTree(client, cfg, tree, '.claude-plugin/marketplace.json'),
-    readJsonBlobFromTree(client, cfg, tree, '.github/plugin/marketplace.json'),
-    readJsonBlobFromTree(client, cfg, tree, 'skills.sh.json')
+    readJsonBlobFromTree(client, cfg, tree, cfg.repoConventions.claudeMarketplacePath),
+    readJsonBlobFromTree(client, cfg, tree, cfg.repoConventions.copilotMarketplacePath),
+    readJsonBlobFromTree(client, cfg, tree, cfg.repoConventions.skillsHubCatalogPath)
   ])
   return {
     claudePlugins: pluginSources(claudeMarketplace),
@@ -462,7 +571,7 @@ async function remoteRepoContext(client, cfg, tree) {
 }
 
 function annotateRemoteRepoSkill(skill, ctx, cfg, tree) {
-  const evalPath = `evals/${skill.name}/triggers.yaml`
+  const evalPath = repoPathJoin(cfg.repoConventions.evalsPath, skill.name, 'triggers.yaml')
   return {
     ...skill,
     marketplaces: {
@@ -478,9 +587,9 @@ function annotateRemoteRepoSkill(skill, ctx, cfg, tree) {
 async function localRepoContext(cfg) {
   const root = repoRootFromConfig(cfg)
   const [claudeMarketplace, copilotMarketplace, skillsHubCatalog] = await Promise.all([
-    readJsonFileIfExists(path.join(root, '.claude-plugin', 'marketplace.json')),
-    readJsonFileIfExists(path.join(root, '.github', 'plugin', 'marketplace.json')),
-    readJsonFileIfExists(path.join(root, 'skills.sh.json'))
+    readJsonFileIfExists(path.join(root, cfg.repoConventions.claudeMarketplacePath)),
+    readJsonFileIfExists(path.join(root, cfg.repoConventions.copilotMarketplacePath)),
+    readJsonFileIfExists(path.join(root, cfg.repoConventions.skillsHubCatalogPath))
   ])
   return {
     root,
@@ -492,7 +601,7 @@ async function localRepoContext(cfg) {
 
 function annotateLocalRepoSkill(skill, ctx, cfg) {
   const expectedSource = skill.repoPath
-  const evalPath = path.join(ctx.root, 'evals', skill.name, 'triggers.yaml')
+  const evalPath = path.join(ctx.root, cfg.repoConventions.evalsPath, skill.name, 'triggers.yaml')
   return {
     ...skill,
     marketplaces: {
@@ -604,7 +713,7 @@ async function doctorRepo(cfg) {
     const normalizedExpected = skill.repoPath
     const claudeSource = ctx.claudePlugins.get(skill.name) || null
     const copilotSource = ctx.copilotPlugins.get(skill.name) || null
-    const evalPath = path.join(ctx.root, 'evals', skill.name, 'triggers.yaml')
+    const evalPath = path.join(ctx.root, cfg.repoConventions.evalsPath, skill.name, 'triggers.yaml')
     const triggersPath = fsSync.existsSync(evalPath) ? path.relative(ctx.root, evalPath).split(path.sep).join('/') : null
     const skillsHubGroup = ctx.skillsHubGroups.get(skill.name) || null
     const skillIssues = []
@@ -1139,8 +1248,8 @@ async function main(argv) {
     if (sub === 'set') {
       const key = args[2]
       const value = args[3]
-      const allowed = new Set(['repoOwner', 'repoName', 'repoBranch', 'repoSkillsPath', 'repoDir', 'customSkillsDir', 'token'])
-      if (!allowed.has(key) || value === undefined) throw new CliError('Usage: skill-ui config set <repoOwner|repoName|repoBranch|repoSkillsPath|repoDir|customSkillsDir|token> <value>', 2)
+      const allowed = new Set(['repoOwner', 'repoName', 'repoBranch', 'repoSkillsPath', 'repoDir', 'repoConfigPath', 'customSkillsDir', 'token'])
+      if (!allowed.has(key) || value === undefined) throw new CliError('Usage: skill-ui config set <repoOwner|repoName|repoBranch|repoSkillsPath|repoDir|repoConfigPath|customSkillsDir|token> <value>', 2)
       await saveCliConfig({ [key]: value })
       return console.log(`Saved ${key} in ${CLI_CONFIG_PATH}${key === 'token' ? ' (redacted)' : `: ${value}`}`)
     }
@@ -1181,7 +1290,8 @@ async function main(argv) {
     const name = args[1]
     if (!name) throw new CliError('Usage: skill-ui download <skill> [--target DIR]', 2)
     const { skill, files } = await downloadSkill(cfg, name)
-    const target = opts.target || cfg.customSkillsDir || path.join(os.homedir(), '.hermes', 'skills')
+    const configuredTarget = cfg.configuredClients.find((client) => client.enabled !== false)?.path
+    const target = opts.target || configuredTarget || cfg.customSkillsDir || path.join(os.homedir(), '.hermes', 'skills')
     const installedDir = await writeSkillBundle(target, skill.name, files)
     const sourceBundleHash = hashSkillFiles(files)
     const installedBundleHash = hashSkillFiles(await readSkillDir(installedDir))
@@ -1194,7 +1304,14 @@ async function main(argv) {
   if (command === 'scaffold') {
     const name = args[1]
     if (!name) throw new CliError('Usage: skill-ui scaffold <name> [--owner TEAM] [--lifecycle STATE] [--target DIR]', 2)
-    const bundle = scaffoldSkillTemplate(name, { owner: opts.owner, lifecycle: opts.lifecycle })
+    const defaults = cfg.skillDefaults
+    const bundle = scaffoldSkillTemplate(name, {
+      owner: opts.owner || defaults.owner,
+      lifecycle: opts.lifecycle || defaults.lifecycle,
+      version: defaults.version,
+      reviewIntervalDays: defaults.reviewIntervalDays,
+      channels: defaults.channels
+    })
     const validation = validateSkillBundle(bundle.skill.name, bundle.files)
     if (!validation.valid) throw new CliError(`Generated scaffold is invalid: ${validation.errors.join(' ')}`)
     if (opts.target) {
@@ -1207,7 +1324,7 @@ async function main(argv) {
   if (command === 'remote' || command === 'mirror') {
     const url = args[1]
     if (!url) throw new CliError(`Usage: skill-ui ${command} <github-url> [--name NAME] [--owner TEAM]${command === 'mirror' ? ' [--dry-run]' : ''}`, 2)
-    const bundle = await importRemoteSkill(url, { name: opts.name, owner: opts.owner, lifecycle: opts.lifecycle })
+    const bundle = await importRemoteSkill(url, { name: opts.name, owner: opts.owner || cfg.skillDefaults.owner, lifecycle: opts.lifecycle || cfg.skillDefaults.mirrorLifecycle })
     if (command === 'remote') return printJson(bundle)
 
     const validation = validateSkillBundle(bundle.skill.name, bundle.files)

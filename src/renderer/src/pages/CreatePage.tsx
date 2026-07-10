@@ -7,14 +7,14 @@ import { Spinner } from '../components/Spinner'
 import SkillEditor from '../components/SkillEditor'
 
 export default function CreatePage() {
-  const { toast } = useApp()
+  const { settings, toast } = useApp()
   const [name, setName] = useState('')
-  const [createOwner, setCreateOwner] = useState('@your-org/your-team')
-  const [createLifecycle, setCreateLifecycle] = useState('experimental')
+  const [createOwner, setCreateOwner] = useState(settings.skillDefaults.owner || '@your-org/your-team')
+  const [createLifecycle, setCreateLifecycle] = useState(String(settings.skillDefaults.lifecycle || 'experimental'))
   const [remoteUrl, setRemoteUrl] = useState('')
   const [remoteName, setRemoteName] = useState('')
-  const [remoteOwner, setRemoteOwner] = useState('@your-org/your-team')
-  const [remoteLifecycle, setRemoteLifecycle] = useState('review')
+  const [remoteOwner, setRemoteOwner] = useState(settings.skillDefaults.owner || '@your-org/your-team')
+  const [remoteLifecycle, setRemoteLifecycle] = useState(String(settings.skillDefaults.mirrorLifecycle || 'review'))
   const [busy, setBusy] = useState(false)
   const [bundle, setBundle] = useState<SkillBundle | null>(null)
 

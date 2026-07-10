@@ -12,6 +12,7 @@ export default function SettingsPage() {
   const [repoBranch, setRepoBranch] = useState(settings.repoBranch)
   const [repoSkillsPath, setRepoSkillsPath] = useState(settings.repoSkillsPath)
   const [repoDir, setRepoDir] = useState(settings.repoDir)
+  const [repoConfigPath, setRepoConfigPath] = useState(settings.repoConfigPath)
   const [customSkillsDir, setCustomSkillsDir] = useState(settings.customSkillsDir)
   const [token, setToken] = useState('')
   const [saving, setSaving] = useState(false)
@@ -23,6 +24,7 @@ export default function SettingsPage() {
     setRepoBranch(settings.repoBranch)
     setRepoSkillsPath(settings.repoSkillsPath)
     setRepoDir(settings.repoDir)
+    setRepoConfigPath(settings.repoConfigPath)
     setCustomSkillsDir(settings.customSkillsDir)
   }, [settings])
 
@@ -33,6 +35,7 @@ export default function SettingsPage() {
       repoBranch: repoBranch.trim() || 'main',
       repoSkillsPath: repoSkillsPath.trim(),
       repoDir: repoDir.trim(),
+      repoConfigPath: repoConfigPath.trim(),
       customSkillsDir: customSkillsDir.trim()
     }
     if (token) patch.token = token
@@ -79,6 +82,11 @@ export default function SettingsPage() {
     setRepoName('skills')
     setRepoBranch('main')
     setRepoSkillsPath('skills')
+  }
+
+  async function pickRepoConfigPath() {
+    const dir = await api.clients.pickDirectory()
+    if (dir) setRepoConfigPath(`${dir.replace(/\/$/, '')}/skill-ui.config.json`)
   }
 
   async function pickCustomDir() {
@@ -148,6 +156,23 @@ export default function SettingsPage() {
           />
           <button className="btn" onClick={pickRepoDir}>
             <FolderOpen size={15} /> Browse
+          </button>
+        </div>
+      </div>
+      <div className="field">
+        <label>Repository config JSON</label>
+        <span className="hint">
+          Optional. A committed <span className="mono">skill-ui.config.json</span> can provide repository coordinates, defaults, conventions, and install clients.
+        </span>
+        <div className="row">
+          <input
+            type="text"
+            value={repoConfigPath}
+            onChange={(e) => setRepoConfigPath(e.target.value)}
+            placeholder="/path/to/skills-checkout/skill-ui.config.json"
+          />
+          <button className="btn" onClick={pickRepoConfigPath}>
+            <FolderOpen size={15} /> Pick repo folder
           </button>
         </div>
       </div>
