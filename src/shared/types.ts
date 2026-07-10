@@ -25,6 +25,12 @@ export interface SkillMeta {
   description: string
   /** Semantic version string if present (metadata.version), else null. */
   version: string | null
+  /** Internal owning team/user from governed skill metadata. */
+  owner?: string | null
+  /** Governed source type, e.g. mirrored-public for remote mirrors. */
+  sourceType?: string | null
+  /** True when the skill is a mirrored remote/upstream skill. */
+  remote?: boolean
   /** sha256 of the SKILL.md content, used as a fallback version signal. */
   hash: string
 }

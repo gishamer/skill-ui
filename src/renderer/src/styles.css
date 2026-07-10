@@ -319,6 +319,59 @@ button {
   background: currentColor;
 }
 
+/* ---------- filters ---------- */
+.filter-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 16px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+}
+
+.filter-field {
+  min-width: 170px;
+}
+
+.filter-field label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.checkbox-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 37px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.checkbox-filter input {
+  accent-color: var(--accent);
+}
+
+.filter-count {
+  margin-left: auto;
+  min-height: 37px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.compact-empty {
+  margin-top: 0;
+}
+
 /* ---------- forms ---------- */
 .field {
   display: flex;

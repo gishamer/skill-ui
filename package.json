@@ -18,6 +18,7 @@
     "test:repo-config": "node scripts/check-repo-config.cjs",
     "test:additional-files": "node scripts/check-additional-files.cjs",
     "test:create-metadata": "node scripts/check-create-metadata.cjs",
+    "test:skill-filters": "node scripts/check-skill-filters.cjs",
     "test:cli-help": "node scripts/check-cli-help.cjs",
     "test:skill-ui-cli-skill": "node scripts/check-skill-ui-cli-skill.cjs",
     "dist": "electron-vite build && electron-builder",
