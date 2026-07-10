@@ -1,6 +1,6 @@
 ---
 name: skill-ui-cli
-description: Use when an agent or desktop AI client needs to discover, install, scaffold, validate, mirror, upload, or update full shared agent skill bundles through the Skill UI CLI without handling GitHub repository URLs, tokens, or auth plumbing directly.
+description: Use when an agent or desktop AI client needs to discover/list available skills, compare descriptions to the current task, install relevant skills, scaffold, validate, mirror, upload, or update full shared agent skill bundles through the Skill UI CLI without handling GitHub repository URLs, tokens, or auth plumbing directly.
 version: 1.1.0
 author: Skill UI
 license: MIT
@@ -24,7 +24,7 @@ A skill is a folder containing a root `SKILL.md`. It may also include support fi
 
 Use this skill when the user asks you to:
 
-- list or inspect available shared skills;
+- discover/list available shared skills and compare their descriptions to the current task;
 - install a skill into Hermes, Claude, Copilot, or another skills directory;
 - scaffold a new governed skill with metadata defaults;
 - validate a local skill folder before publishing;
@@ -214,11 +214,13 @@ Doctor checks real skills against marketplace manifests, trigger evals, skills h
 
 ### Discover and install
 
+Use this before starting a task when a task-specific skill might already exist.
+
 1. `skill-ui list --json`
-2. Pick the matching skill by name/description.
-3. `skill-ui read <name> --json` if you need to inspect it first.
+2. Read each candidate's `description` and pick only skills whose trigger matches the current task.
+3. `skill-ui read <name> --json` if you need to inspect the full skill before using it.
 4. `skill-ui download <name> --target <client-skills-dir> --json`
-5. Tell the user the installed directory and whether the target client must reload skills.
+5. Tell the user which skill was selected, why, the installed directory, and whether the target client must reload skills.
 
 ### Create and publish
 
@@ -239,6 +241,8 @@ Doctor checks real skills against marketplace manifests, trigger evals, skills h
 3. `skill-ui validate ./skill-folder --json`
 4. `skill-ui update ./skill-folder --dry-run --json`
 5. `skill-ui update ./skill-folder --note "Summarize the changes"`
+
+Use `update` for an installed/downloaded repository skill after the user asks to change the skill content. It opens a pull request against the configured skill repository. For a GitHub URL that is not yet part of the repository, use `remote`/`mirror` first; `update` does not patch an arbitrary upstream remote skill in place.
 
 ## Output handling
 
